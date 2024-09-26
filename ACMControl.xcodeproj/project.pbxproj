@@ -14,6 +14,14 @@
 		BDE52E432CA5439A0053970B /* ACMControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E422CA5439A0053970B /* ACMControlTests.swift */; };
 		BDE52E4D2CA5439A0053970B /* ACMControlUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E4C2CA5439A0053970B /* ACMControlUITests.swift */; };
 		BDE52E4F2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E4E2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift */; };
+		BDE52E632CA544DC0053970B /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E622CA544DB0053970B /* BluetoothManager.swift */; };
+		BDE52E652CA5450C0053970B /* ControlSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E642CA5450C0053970B /* ControlSwitch.swift */; };
+		BDE52E672CA545180053970B /* RenameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E662CA545180053970B /* RenameView.swift */; };
+		BDE52E692CA545290053970B /* BrightnessAdjusterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E682CA545290053970B /* BrightnessAdjusterView.swift */; };
+		BDE52E6B2CA545340053970B /* SideMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E6A2CA545340053970B /* SideMenu.swift */; };
+		BDE52E6D2CA545400053970B /* DataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E6C2CA545400053970B /* DataView.swift */; };
+		BDE52E6F2CA545550053970B /* ConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E6E2CA545550053970B /* ConfigurationView.swift */; };
+		BDE52E712CA545630053970B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E702CA545630053970B /* AboutView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,6 +52,15 @@
 		BDE52E482CA5439A0053970B /* ACMControlUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ACMControlUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDE52E4C2CA5439A0053970B /* ACMControlUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlUITests.swift; sourceTree = "<group>"; };
 		BDE52E4E2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		BDE52E622CA544DB0053970B /* BluetoothManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
+		BDE52E642CA5450C0053970B /* ControlSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSwitch.swift; sourceTree = "<group>"; };
+		BDE52E662CA545180053970B /* RenameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameView.swift; sourceTree = "<group>"; };
+		BDE52E682CA545290053970B /* BrightnessAdjusterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessAdjusterView.swift; sourceTree = "<group>"; };
+		BDE52E6A2CA545340053970B /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
+		BDE52E6C2CA545400053970B /* DataView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataView.swift; sourceTree = "<group>"; };
+		BDE52E6E2CA545550053970B /* ConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationView.swift; sourceTree = "<group>"; };
+		BDE52E702CA545630053970B /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		BDE52E742CA547460053970B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,8 +111,10 @@
 		BDE52E302CA543960053970B /* ACMControl */ = {
 			isa = PBXGroup;
 			children = (
+				BDE52E742CA547460053970B /* Info.plist */,
 				BDE52E312CA543960053970B /* ACMControlApp.swift */,
-				BDE52E332CA543960053970B /* ContentView.swift */,
+				BDE52E612CA544CA0053970B /* Models */,
+				BDE52E602CA544BF0053970B /* Views */,
 				BDE52E352CA543990053970B /* Assets.xcassets */,
 				BDE52E372CA543990053970B /* Preview Content */,
 			);
@@ -125,6 +144,29 @@
 				BDE52E4E2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift */,
 			);
 			path = ACMControlUITests;
+			sourceTree = "<group>";
+		};
+		BDE52E602CA544BF0053970B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BDE52E332CA543960053970B /* ContentView.swift */,
+				BDE52E642CA5450C0053970B /* ControlSwitch.swift */,
+				BDE52E662CA545180053970B /* RenameView.swift */,
+				BDE52E682CA545290053970B /* BrightnessAdjusterView.swift */,
+				BDE52E6A2CA545340053970B /* SideMenu.swift */,
+				BDE52E6C2CA545400053970B /* DataView.swift */,
+				BDE52E6E2CA545550053970B /* ConfigurationView.swift */,
+				BDE52E702CA545630053970B /* AboutView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BDE52E612CA544CA0053970B /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BDE52E622CA544DB0053970B /* BluetoothManager.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -258,6 +300,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				BDE52E342CA543960053970B /* ContentView.swift in Sources */,
+				BDE52E6F2CA545550053970B /* ConfigurationView.swift in Sources */,
+				BDE52E692CA545290053970B /* BrightnessAdjusterView.swift in Sources */,
+				BDE52E652CA5450C0053970B /* ControlSwitch.swift in Sources */,
+				BDE52E712CA545630053970B /* AboutView.swift in Sources */,
+				BDE52E6B2CA545340053970B /* SideMenu.swift in Sources */,
+				BDE52E672CA545180053970B /* RenameView.swift in Sources */,
+				BDE52E632CA544DC0053970B /* BluetoothManager.swift in Sources */,
+				BDE52E6D2CA545400053970B /* DataView.swift in Sources */,
 				BDE52E322CA543960053970B /* ACMControlApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -425,6 +475,7 @@
 				DEVELOPMENT_TEAM = 5K3U7JWXXN;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ACMControl/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -454,6 +505,7 @@
 				DEVELOPMENT_TEAM = 5K3U7JWXXN;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ACMControl/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
