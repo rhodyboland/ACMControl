@@ -12,7 +12,7 @@ struct ControlSwitch: View {
     // MARK: - Properties
     @Binding var title: String
     @Binding var isOn: Bool
-    var brightness: Binding<Float>? // Optional brightness binding for LC switches
+    var brightness: Binding<Float>?
     var index: Int
     var action: () -> Void
     var renameAction: () -> Void
@@ -20,25 +20,52 @@ struct ControlSwitch: View {
     
     // MARK: - Body
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        Button(action: {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                isOn.toggle()
+            }
+            print("\(title) toggled to \(isOn ? "ON" : "OFF")")
+            action()
+        }) {
             HStack {
+                if isOn {
+                    Image(systemName: "power")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .padding(.leading, 10)
+                } else {
+                    Image(systemName: "power")
+                        .foregroundColor(.gray)
+                        .font(.headline)
+                        .padding(.leading, 10)
+                }
+                
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(isOn ? .white : .primary)
+                    .padding(.leading, 5)
+                
                 Spacer()
-                Toggle("", isOn: $isOn)
-                    .labelsHidden()
-                    .toggleStyle(SwitchToggleStyle(tint: .green))
-                    .onChange(of: isOn) { newValue in
-                        print("\(title) toggled to \(newValue ? "ON" : "OFF")")
-                        action()
-                    }
+                
             }
             .padding()
-            .background(Color(.systemGray6))
+            .background(
+                ZStack {
+                    if isOn {
+                        LinearGradient(gradient: Gradient(colors: [Color.green, Color.mint]),
+                                       startPoint: .topLeading,
+                                       endPoint: .bottomTrailing)
+                    } else {
+                        Color(.systemGray6)
+                    }
+                }
+            )
             .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+            .shadow(color: isOn ? Color.green.opacity(0.4) : Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
         }
+        .buttonStyle(PlainButtonStyle())
         .contextMenu {
             if brightness != nil {
                 Button(action: {

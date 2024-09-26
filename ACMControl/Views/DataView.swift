@@ -13,12 +13,12 @@ struct DataView: View {
     
     // Define grid layout with 2 columns
     let columns: [GridItem] = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
     ]
     
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
+        LazyVGrid(columns: columns, spacing: 12) {
             DataCard(title: "Battery Voltage", value: "\(String(format: "%.2f", bluetoothManager.batteryVoltage)) V")
             DataCard(title: "Current Usage", value: "\(String(format: "%.2f", bluetoothManager.currentUsage)) A")
             DataCard(title: "Solar Voltage", value: "\(String(format: "%.2f", bluetoothManager.solarVoltage)) V")
@@ -46,7 +46,7 @@ struct DataCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 80)
-        .background(LinearGradient(gradient: Gradient(colors: [Color.blue, Color.purple]),
+        .background(LinearGradient(gradient: Gradient(colors: [Color.blue, Color.cyan]),
                                    startPoint: .topLeading,
                                    endPoint: .bottomTrailing))
         .cornerRadius(12)

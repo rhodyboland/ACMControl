@@ -36,11 +36,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         // Header
-                        Text("ACM Control")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .padding(.top)
-                            .frame(maxWidth: .infinity, alignment: .center)
+//                        Text("ACM Control")
+//                            .font(.largeTitle)
+//                            .fontWeight(.bold)
+//                            .padding(.top)
+//                            .frame(maxWidth: .infinity, alignment: .center)
                         
                         // Connection Status
                         HStack {
@@ -116,7 +116,7 @@ struct ContentView: View {
                         .padding()
                 }
             )
-//            .navigationBarTitle("ACM Control", displayMode: .inline)
+            .navigationBarTitle("ACM Control", displayMode: .inline)
             // Brightness Adjuster Sheet
             .sheet(isPresented: $showBrightnessAdjuster) {
                 if let index = selectedBrightnessIndex {
