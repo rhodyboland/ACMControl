@@ -21,7 +21,15 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var solarVoltage: Float = 0.0
     @Published var solarCurrent: Float = 0.0
     @Published var solarPower: Float = 0.0
-    @Published var solarCharging: Bool = false
+    @Published var solarCharging: Int = 0
+    @Published var serialState: Bool = true
+    
+    
+    
+    var solarChargingState: String {
+            let state = SolarChargingState(rawValue: solarCharging) ?? .unknown
+            return state == .unknown ? "\(state.description) (\(solarCharging))" : state.description
+        }
     
     // MARK: - Published Properties for Low Current (LC) Outputs
     @Published var lowCurrentStates: [Bool] = Array(repeating: false, count: 8)
@@ -49,6 +57,46 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     // MARK: - Flag to Control Switch Updates
     private var shouldUpdateSwitches: Bool = false
     
+    
+    
+    enum SolarChargingState: Int {
+        case off = 0
+        case fault = 2
+        case bulk = 3
+        case absorption = 4
+        case float = 5
+        case equalizeManual = 7
+        case startingUp = 245
+        case autoEqualize = 247
+        case externalControl = 252
+        case unknown
+
+        var description: String {
+            switch self {
+            case .off:
+                return "Off"
+            case .fault:
+                return "Fault"
+            case .bulk:
+                return "Bulk"
+            case .absorption:
+                return "Absorption"
+            case .float:
+                return "Float"
+            case .equalizeManual:
+                return "Equalize (Manual)"
+            case .startingUp:
+                return "Starting-up"
+            case .autoEqualize:
+                return "Auto Equalize / Recondition"
+            case .externalControl:
+                return "External Control"
+            case .unknown:
+                return "Unknown"
+            }
+        }
+    }
+
     // MARK: - Initialization
     override init() {
         super.init()
@@ -238,21 +286,22 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 switch identifier {
                 case "V": // Voltage and Current Section
                     let values = content.split(separator: ",")
-                    if values.count == 5 {
+                    if values.count == 7 {
                         self.batteryVoltage = Float(strtoul(String(values[0]), nil, 16)) / 100.0
                         self.currentUsage = Float(strtoul(String(values[1]), nil, 16)) / 100000.0
-                        self.solarVoltage = Float(strtoul(String(values[2]), nil, 16)) / 100.0
+                        self.solarVoltage = Float(strtoul(String(values[2]), nil, 16)) / 100000.0
                         self.solarCurrent = Float(strtoul(String(values[3]), nil, 16)) / 100.0
-                        self.solarCharging = (values[3] == "1")
                         self.solarPower = Float(strtoul(String(values[4]), nil, 16)) / 100.0
-                        
+                        self.solarCharging = Int(strtoul(String(values[5]), nil, 16))
+                        self.serialState = (values[6] == "1")
                         // Debugging Prints
                         print("Battery Voltage Updated: \(self.batteryVoltage) V")
                         print("Current Usage Updated: \(self.currentUsage) A")
                         print("Solar Voltage Updated: \(self.solarVoltage) V")
                         print("Solar Current Updated: \(self.solarCurrent) A")
-                        print("Solar Charging Updated: \(self.solarCharging)")
                         print("Solar Power Updated: \(self.solarPower) W")
+                        print("Solar Charging Updated: \(self.solarCharging)")
+                        print("Serial Connection: \(self.serialState)")
                     } else {
                         print("Invalid number of voltage/current values: \(values.count)")
                     }

@@ -35,12 +35,6 @@ struct ContentView: View {
                 // Main Content
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Header
-//                        Text("ACM Control")
-//                            .font(.largeTitle)
-//                            .fontWeight(.bold)
-//                            .padding(.top)
-//                            .frame(maxWidth: .infinity, alignment: .center)
                         
                         // Connection Status
                         HStack {
