@@ -16,13 +16,18 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     private var characteristic: CBCharacteristic?
     
     // MARK: - Published Properties for Data
+    @Published var batteryPercentage: Int = 50
     @Published var batteryVoltage: Float = 0.0
     @Published var currentUsage: Float = 0.0
+    
+    @Published var solarCharging: Int = 0
     @Published var solarVoltage: Float = 0.0
     @Published var solarCurrent: Float = 0.0
     @Published var solarPower: Float = 0.0
-    @Published var solarCharging: Int = 0
     @Published var serialState: Bool = true
+    
+    
+    @Published var inverterState: Bool = false
     
     
     
@@ -57,7 +62,68 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     // MARK: - Flag to Control Switch Updates
     private var shouldUpdateSwitches: Bool = false
     
-    
+    var batterySubsystem: Subsystem {
+            Subsystem(
+                name: "Battery",
+                state: "\(batteryPercentage)%",
+                dataItems: [
+                    DataItem(
+                        title: "Battery Voltage",
+                        value: String(format: "%.2f V", batteryVoltage),
+                        state: "Normal",
+                        isDisabled: false
+                    ),
+                    DataItem(
+                        title: "Current Usage",
+                        value: String(format: "%.2f A", currentUsage),
+                        state: "Normal",
+                        isDisabled: false
+                    ),
+                    DataItem(
+                        title: "Battery Percentage",
+                        value: "\(batteryPercentage)%", // Use Int directly
+                        state: "Normal",
+                        isDisabled: false,
+                        type: .batteryPercentage // Specify the card type
+                    )
+                    // Add more battery-related data items as needed
+                ]
+            )
+        }
+        
+        var solarSubsystem: Subsystem {
+            Subsystem(
+                name: "Solar",
+                state: solarChargingState,
+                dataItems: [
+                    DataItem(
+                        title: "Solar Voltage",
+                        value: String(format: "%.2f V", solarVoltage),
+                        state: solarChargingState,
+                        isDisabled: !serialState
+                    ),
+                    DataItem(
+                        title: "Solar Current",
+                        value: String(format: "%.2f A", solarCurrent),
+                        state: solarChargingState,
+                        isDisabled: !serialState
+                    ),
+                    DataItem(
+                        title: "Solar Power",
+                        value: String(format: "%.2f W", solarPower),
+                        state: solarChargingState,
+                        isDisabled: !serialState
+                    ),
+                    DataItem(
+                        title: "Solar State",
+                        value: solarChargingState,
+                        state: solarChargingState,
+                        isDisabled: !serialState
+                    )
+                    // Add more solar-related data items as needed
+                ]
+            )
+        }
     
     enum SolarChargingState: Int {
         case off = 0
@@ -289,11 +355,14 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     if values.count == 7 {
                         self.batteryVoltage = Float(strtoul(String(values[0]), nil, 16)) / 100.0
                         self.currentUsage = Float(strtoul(String(values[1]), nil, 16)) / 100000.0
+                        
                         self.solarVoltage = Float(strtoul(String(values[2]), nil, 16)) / 100000.0
                         self.solarCurrent = Float(strtoul(String(values[3]), nil, 16)) / 100.0
                         self.solarPower = Float(strtoul(String(values[4]), nil, 16)) / 100.0
                         self.solarCharging = Int(strtoul(String(values[5]), nil, 16))
                         self.serialState = (values[6] == "1")
+                        
+                        
                         // Debugging Prints
                         print("Battery Voltage Updated: \(self.batteryVoltage) V")
                         print("Current Usage Updated: \(self.currentUsage) A")
@@ -437,6 +506,12 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         controlAccessory(command: command)
     }
     
+    func setInverterState(index: Int, state: Bool) {
+        let command = "I\(index + 1)\(state ? "1" : "0")"
+        print("Sending command to set Inverter\(index + 1) to \(state ? "ON" : "OFF")")
+        controlAccessory(command: command)
+    }
+    
     // MARK: - Control Commands
     func controlAccessory(command: String) {
         guard let characteristic = self.characteristic else {
@@ -493,3 +568,5 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Renamed MC\(index + 1) to \(newName)")
     }
 }
+
+

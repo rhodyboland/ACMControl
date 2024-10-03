@@ -22,6 +22,8 @@
 		BDE52E6D2CA545400053970B /* DataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E6C2CA545400053970B /* DataView.swift */; };
 		BDE52E6F2CA545550053970B /* ConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E6E2CA545550053970B /* ConfigurationView.swift */; };
 		BDE52E712CA545630053970B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E702CA545630053970B /* AboutView.swift */; };
+		BDE52E762CA678EA0053970B /* DataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E752CA678E90053970B /* DataModels.swift */; };
+		BDE52E782CA67BB70053970B /* GradientUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E772CA67BB70053970B /* GradientUtility.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +63,8 @@
 		BDE52E6E2CA545550053970B /* ConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationView.swift; sourceTree = "<group>"; };
 		BDE52E702CA545630053970B /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BDE52E742CA547460053970B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BDE52E752CA678E90053970B /* DataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataModels.swift; sourceTree = "<group>"; };
+		BDE52E772CA67BB70053970B /* GradientUtility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GradientUtility.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -157,6 +161,8 @@
 				BDE52E6C2CA545400053970B /* DataView.swift */,
 				BDE52E6E2CA545550053970B /* ConfigurationView.swift */,
 				BDE52E702CA545630053970B /* AboutView.swift */,
+				BDE52E752CA678E90053970B /* DataModels.swift */,
+				BDE52E772CA67BB70053970B /* GradientUtility.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -301,6 +307,8 @@
 			files = (
 				BDE52E342CA543960053970B /* ContentView.swift in Sources */,
 				BDE52E6F2CA545550053970B /* ConfigurationView.swift in Sources */,
+				BDE52E782CA67BB70053970B /* GradientUtility.swift in Sources */,
+				BDE52E762CA678EA0053970B /* DataModels.swift in Sources */,
 				BDE52E692CA545290053970B /* BrightnessAdjusterView.swift in Sources */,
 				BDE52E652CA5450C0053970B /* ControlSwitch.swift in Sources */,
 				BDE52E712CA545630053970B /* AboutView.swift in Sources */,
