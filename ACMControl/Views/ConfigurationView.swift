@@ -18,7 +18,7 @@ struct ConfigurationView: View {
                     HStack {
                         Text("Cut Out Voltage")
                         Spacer()
-                        TextField("12.0", value: $bluetoothManager.cutOutVoltage, format: .number)
+                        TextField("11.0", value: $bluetoothManager.cutOutVoltage, format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -27,7 +27,7 @@ struct ConfigurationView: View {
                     HStack {
                         Text("Cut In Voltage")
                         Spacer()
-                        TextField("12.4", value: $bluetoothManager.cutInVoltage, format: .number)
+                        TextField("11.5", value: $bluetoothManager.cutInVoltage, format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .textFieldStyle(RoundedBorderTextFieldStyle())

@@ -7,11 +7,11 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 enum DataCardType {
     case standard
     case batteryPercentage
-    // Add more cases as needed for future card types
 }
 
 struct DataItem: Identifiable {
@@ -21,8 +21,7 @@ struct DataItem: Identifiable {
     var state: String
     var isDisabled: Bool
     let type: DataCardType
-    
-    // Initializer with default type as .standard
+
     init(title: String, value: String, state: String, isDisabled: Bool, type: DataCardType = .standard) {
         self.title = title
         self.value = value

@@ -29,6 +29,8 @@ struct ContentView: View {
         case mediumCurrent
     }
     
+    
+    
     var body: some View {
         NavigationView {
             ZStack(alignment: .leading) {
@@ -203,6 +205,7 @@ struct LowCurrentControlView: View {
                             }
                         ),
                         index: index,
+                        isAlwaysOn: bluetoothManager.alwaysOnChannels[index],
                         action: {
                             bluetoothManager.setLowCurrentState(index: index, state: bluetoothManager.lowCurrentStates[index])
                         },
@@ -264,6 +267,7 @@ struct MediumCurrentControlView: View {
                         ),
                         brightness: nil, // No brightness for MC switches
                         index: index,
+                        isAlwaysOn: bluetoothManager.alwaysOnChannels[8 + index],
                         action: {
                             bluetoothManager.setMediumCurrentState(index: index, state: bluetoothManager.mediumCurrentStates[index])
                         },
@@ -279,6 +283,10 @@ struct MediumCurrentControlView: View {
                 }
             }
             .padding(.horizontal)
+            // 2) Inverter Control, matching style
+            InverterControlView(bluetoothManager: bluetoothManager)
+                .padding(.horizontal)
+                .padding(.top, 10)
         }
     }
 }

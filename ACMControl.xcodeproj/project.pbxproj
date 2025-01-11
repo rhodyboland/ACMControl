@@ -11,9 +11,6 @@
 		BDE52E342CA543960053970B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E332CA543960053970B /* ContentView.swift */; };
 		BDE52E362CA543990053970B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BDE52E352CA543990053970B /* Assets.xcassets */; };
 		BDE52E392CA543990053970B /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BDE52E382CA543990053970B /* Preview Assets.xcassets */; };
-		BDE52E432CA5439A0053970B /* ACMControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E422CA5439A0053970B /* ACMControlTests.swift */; };
-		BDE52E4D2CA5439A0053970B /* ACMControlUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E4C2CA5439A0053970B /* ACMControlUITests.swift */; };
-		BDE52E4F2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E4E2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift */; };
 		BDE52E632CA544DC0053970B /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E622CA544DB0053970B /* BluetoothManager.swift */; };
 		BDE52E652CA5450C0053970B /* ControlSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E642CA5450C0053970B /* ControlSwitch.swift */; };
 		BDE52E672CA545180053970B /* RenameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E662CA545180053970B /* RenameView.swift */; };
@@ -26,32 +23,13 @@
 		BDE52E782CA67BB70053970B /* GradientUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE52E772CA67BB70053970B /* GradientUtility.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		BDE52E3F2CA5439A0053970B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BDE52E262CA543960053970B /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BDE52E2D2CA543960053970B;
-			remoteInfo = ACMControl;
-		};
-		BDE52E492CA5439A0053970B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BDE52E262CA543960053970B /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BDE52E2D2CA543960053970B;
-			remoteInfo = ACMControl;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		BDE52E2E2CA543960053970B /* ACMControl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ACMControl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDE52E312CA543960053970B /* ACMControlApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlApp.swift; sourceTree = "<group>"; };
 		BDE52E332CA543960053970B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BDE52E352CA543990053970B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BDE52E382CA543990053970B /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		BDE52E3E2CA5439A0053970B /* ACMControlTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ACMControlTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDE52E422CA5439A0053970B /* ACMControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlTests.swift; sourceTree = "<group>"; };
-		BDE52E482CA5439A0053970B /* ACMControlUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ACMControlUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDE52E4C2CA5439A0053970B /* ACMControlUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlUITests.swift; sourceTree = "<group>"; };
 		BDE52E4E2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACMControlUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		BDE52E622CA544DB0053970B /* BluetoothManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
@@ -75,20 +53,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BDE52E3B2CA5439A0053970B /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BDE52E452CA5439A0053970B /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -106,8 +70,6 @@
 			isa = PBXGroup;
 			children = (
 				BDE52E2E2CA543960053970B /* ACMControl.app */,
-				BDE52E3E2CA5439A0053970B /* ACMControlTests.xctest */,
-				BDE52E482CA5439A0053970B /* ACMControlUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -195,42 +157,6 @@
 			productReference = BDE52E2E2CA543960053970B /* ACMControl.app */;
 			productType = "com.apple.product-type.application";
 		};
-		BDE52E3D2CA5439A0053970B /* ACMControlTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BDE52E552CA5439A0053970B /* Build configuration list for PBXNativeTarget "ACMControlTests" */;
-			buildPhases = (
-				BDE52E3A2CA5439A0053970B /* Sources */,
-				BDE52E3B2CA5439A0053970B /* Frameworks */,
-				BDE52E3C2CA5439A0053970B /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				BDE52E402CA5439A0053970B /* PBXTargetDependency */,
-			);
-			name = ACMControlTests;
-			productName = ACMControlTests;
-			productReference = BDE52E3E2CA5439A0053970B /* ACMControlTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		BDE52E472CA5439A0053970B /* ACMControlUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BDE52E582CA5439A0053970B /* Build configuration list for PBXNativeTarget "ACMControlUITests" */;
-			buildPhases = (
-				BDE52E442CA5439A0053970B /* Sources */,
-				BDE52E452CA5439A0053970B /* Frameworks */,
-				BDE52E462CA5439A0053970B /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				BDE52E4A2CA5439A0053970B /* PBXTargetDependency */,
-			);
-			name = ACMControlUITests;
-			productName = ACMControlUITests;
-			productReference = BDE52E482CA5439A0053970B /* ACMControlUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -243,14 +169,6 @@
 				TargetAttributes = {
 					BDE52E2D2CA543960053970B = {
 						CreatedOnToolsVersion = 15.4;
-					};
-					BDE52E3D2CA5439A0053970B = {
-						CreatedOnToolsVersion = 15.4;
-						TestTargetID = BDE52E2D2CA543960053970B;
-					};
-					BDE52E472CA5439A0053970B = {
-						CreatedOnToolsVersion = 15.4;
-						TestTargetID = BDE52E2D2CA543960053970B;
 					};
 				};
 			};
@@ -268,8 +186,6 @@
 			projectRoot = "";
 			targets = (
 				BDE52E2D2CA543960053970B /* ACMControl */,
-				BDE52E3D2CA5439A0053970B /* ACMControlTests */,
-				BDE52E472CA5439A0053970B /* ACMControlUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -281,20 +197,6 @@
 			files = (
 				BDE52E392CA543990053970B /* Preview Assets.xcassets in Resources */,
 				BDE52E362CA543990053970B /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BDE52E3C2CA5439A0053970B /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BDE52E462CA5439A0053970B /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -320,37 +222,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BDE52E3A2CA5439A0053970B /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BDE52E432CA5439A0053970B /* ACMControlTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BDE52E442CA5439A0053970B /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BDE52E4F2CA5439A0053970B /* ACMControlUITestsLaunchTests.swift in Sources */,
-				BDE52E4D2CA5439A0053970B /* ACMControlUITests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		BDE52E402CA5439A0053970B /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BDE52E2D2CA543960053970B /* ACMControl */;
-			targetProxy = BDE52E3F2CA5439A0053970B /* PBXContainerItemProxy */;
-		};
-		BDE52E4A2CA5439A0053970B /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BDE52E2D2CA543960053970B /* ACMControl */;
-			targetProxy = BDE52E492CA5439A0053970B /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		BDE52E502CA5439A0053970B /* Debug */ = {
@@ -532,82 +404,6 @@
 			};
 			name = Release;
 		};
-		BDE52E562CA5439A0053970B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5K3U7JWXXN;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = rb.ACMControlTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ACMControl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ACMControl";
-			};
-			name = Debug;
-		};
-		BDE52E572CA5439A0053970B /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5K3U7JWXXN;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = rb.ACMControlTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ACMControl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ACMControl";
-			};
-			name = Release;
-		};
-		BDE52E592CA5439A0053970B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5K3U7JWXXN;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = rb.ACMControlUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = ACMControl;
-			};
-			name = Debug;
-		};
-		BDE52E5A2CA5439A0053970B /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5K3U7JWXXN;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = rb.ACMControlUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = ACMControl;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -625,24 +421,6 @@
 			buildConfigurations = (
 				BDE52E532CA5439A0053970B /* Debug */,
 				BDE52E542CA5439A0053970B /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BDE52E552CA5439A0053970B /* Build configuration list for PBXNativeTarget "ACMControlTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BDE52E562CA5439A0053970B /* Debug */,
-				BDE52E572CA5439A0053970B /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BDE52E582CA5439A0053970B /* Build configuration list for PBXNativeTarget "ACMControlUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BDE52E592CA5439A0053970B /* Debug */,
-				BDE52E5A2CA5439A0053970B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -7,15 +7,23 @@
 
 import CoreBluetooth
 import SwiftUI
-import UIKit // Needed for app lifecycle notifications
+import UIKit
 
+enum InverterState {
+    case off
+    case on
+    case error
+}
+
+/// A class responsible for handling all Bluetooth interactions with the ESP32-based ACM module.
+/// It exposes published properties for battery, solar, and channel states, as well as the Subsystem objects for real-time UI updates.
 class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     // MARK: - Bluetooth Properties
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristic: CBCharacteristic?
     
-    // MARK: - Published Properties for Data
+    // MARK: - Published Properties (Battery / Solar Data)
     @Published var batteryPercentage: Int = 50
     @Published var batteryVoltage: Float = 0.0
     @Published var currentUsage: Float = 0.0
@@ -26,105 +34,13 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var solarPower: Float = 0.0
     @Published var serialState: Bool = true
     
+    @Published var inverterState: InverterState = .off
     
-    @Published var inverterState: Bool = false
+    /// Subsystem objects for real-time UI updates:
+    @Published var batterySubsystem: Subsystem
+    @Published var solarSubsystem: Subsystem
     
-    
-    
-    var solarChargingState: String {
-            let state = SolarChargingState(rawValue: solarCharging) ?? .unknown
-            return state == .unknown ? "\(state.description) (\(solarCharging))" : state.description
-        }
-    
-    // MARK: - Published Properties for Low Current (LC) Outputs
-    @Published var lowCurrentStates: [Bool] = Array(repeating: false, count: 8)
-    @Published var lowCurrentBrightness: [Float] = Array(repeating: 1.0, count: 8)
-    @Published var lowCurrents: [Float] = Array(repeating: 0.0, count: 8)
-    
-    // MARK: - Published Properties for Medium Current (MC) Outputs
-    @Published var mediumCurrentStates: [Bool] = Array(repeating: false, count: 2)
-    @Published var mediumCurrents: [Float] = Array(repeating: 0.0, count: 2)
-    
-    // MARK: - Published Properties for Configuration
-    @Published var cutOutVoltage: Float = 11.8
-    @Published var cutInVoltage: Float = 12.2
-    @Published var autoCutoffEnabled: Bool = true
-    @Published var alwaysOnChannels: [Bool] = Array(repeating: false, count: 10)
-    @Published var priorityChannels: [Bool] = Array(repeating: false, count: 10)
-    
-    // MARK: - Published Property for Output Names
-    @Published var lowCurrentOutputNames: [String] = (1...8).map { "LC\($0)" }
-    @Published var mediumCurrentOutputNames: [String] = (1...2).map { "MC\($0)" }
-    
-    // MARK: - Published Property for Connection Status
-    @Published var isConnected: Bool = false
-    
-    // MARK: - Flag to Control Switch Updates
-    private var shouldUpdateSwitches: Bool = false
-    
-    var batterySubsystem: Subsystem {
-            Subsystem(
-                name: "Battery",
-                state: "\(batteryPercentage)%",
-                dataItems: [
-                    DataItem(
-                        title: "Battery Voltage",
-                        value: String(format: "%.2f V", batteryVoltage),
-                        state: "Normal",
-                        isDisabled: false
-                    ),
-                    DataItem(
-                        title: "Current Usage",
-                        value: String(format: "%.2f A", currentUsage),
-                        state: "Normal",
-                        isDisabled: false
-                    ),
-                    DataItem(
-                        title: "Battery Percentage",
-                        value: "\(batteryPercentage)%", // Use Int directly
-                        state: "Normal",
-                        isDisabled: false,
-                        type: .batteryPercentage // Specify the card type
-                    )
-                    // Add more battery-related data items as needed
-                ]
-            )
-        }
-        
-        var solarSubsystem: Subsystem {
-            Subsystem(
-                name: "Solar",
-                state: solarChargingState,
-                dataItems: [
-                    DataItem(
-                        title: "Solar Voltage",
-                        value: String(format: "%.2f V", solarVoltage),
-                        state: solarChargingState,
-                        isDisabled: !serialState
-                    ),
-                    DataItem(
-                        title: "Solar Current",
-                        value: String(format: "%.2f A", solarCurrent),
-                        state: solarChargingState,
-                        isDisabled: !serialState
-                    ),
-                    DataItem(
-                        title: "Solar Power",
-                        value: String(format: "%.2f W", solarPower),
-                        state: solarChargingState,
-                        isDisabled: !serialState
-                    ),
-                    DataItem(
-                        title: "Solar State",
-                        value: solarChargingState,
-                        state: solarChargingState,
-                        isDisabled: !serialState
-                    )
-                    // Add more solar-related data items as needed
-                ]
-            )
-        }
-    
+    // MARK: - Solar Charging State
     enum SolarChargingState: Int {
         case off = 0
         case fault = 2
@@ -139,33 +55,75 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
 
         var description: String {
             switch self {
-            case .off:
-                return "Off"
-            case .fault:
-                return "Fault"
-            case .bulk:
-                return "Bulk"
-            case .absorption:
-                return "Absorption"
-            case .float:
-                return "Float"
-            case .equalizeManual:
-                return "Equalize (Manual)"
-            case .startingUp:
-                return "Starting-up"
-            case .autoEqualize:
-                return "Auto Equalize / Recondition"
-            case .externalControl:
-                return "External Control"
-            case .unknown:
-                return "Unknown"
+            case .off: return "Off"
+            case .fault: return "Fault"
+            case .bulk: return "Bulk"
+            case .absorption: return "Absorption"
+            case .float: return "Float"
+            case .equalizeManual: return "Equalize (Manual)"
+            case .startingUp: return "Starting-up"
+            case .autoEqualize: return "Auto Equalize / Recondition"
+            case .externalControl: return "External Control"
+            case .unknown: return "Unknown"
             }
         }
     }
 
+
+    
+    func setInverterState(on: Bool) {
+        // Example: "I1X" => 'I' (inverter), '1' (inverter #), then '1' or '0'
+        let command = "I1" + (on ? "1" : "0")
+        controlAccessory(command: command)
+        // The actual state gets updated in parseReceivedData()
+        // once the device returns the new "I:" voltage
+    }
+    
+    // MARK: - Published Properties (Accessory States)
+    @Published var lowCurrentStates: [Bool] = Array(repeating: false, count: 8)
+    @Published var lowCurrentBrightness: [Float] = Array(repeating: 1.0, count: 8)
+    @Published var lowCurrents: [Float] = Array(repeating: 0.0, count: 8)
+    
+    @Published var mediumCurrentStates: [Bool] = Array(repeating: false, count: 2)
+    @Published var mediumCurrents: [Float] = Array(repeating: 0.0, count: 2)
+    
+    // MARK: - Published Properties (Configuration)
+    @Published var cutOutVoltage: Float = 11.8
+    @Published var cutInVoltage: Float = 12.2
+    @Published var autoCutoffEnabled: Bool = true
+    @Published var alwaysOnChannels: [Bool] = Array(repeating: false, count: 10)
+    @Published var priorityChannels: [Bool] = Array(repeating: false, count: 10)
+    
+    // MARK: - Published Property for Output Names
+    @Published var lowCurrentOutputNames: [String] = (1...8).map { "LC\($0)" }
+    @Published var mediumCurrentOutputNames: [String] = (1...2).map { "MC\($0)" }
+    
+    // MARK: - Published Property for Connection Status
+    @Published var isConnected: Bool = false
+    
+    // Flag to control switch updates (once on connection)
+    private var shouldUpdateSwitches: Bool = false
+    
+    
+
+    
     // MARK: - Initialization
     override init() {
+        // Create subsystem objects with placeholder data
+        self.batterySubsystem = Subsystem(
+            name: "Battery",
+            state: "Unknown",
+            dataItems: []
+        )
+        self.solarSubsystem = Subsystem(
+            name: "Solar",
+            state: "Unknown",
+            dataItems: []
+        )
+        
         super.init()
+        // Attempt to load existing configuration from user defaults
+        loadUserConfiguration()
         centralManager = CBCentralManager(delegate: self, queue: nil)
         loadOutputNames()
         
@@ -192,7 +150,40 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     
     @objc private func appWillResignActive() {
         print("App will resign active. Current connection status: \(isConnected)")
-        // Optional: Handle any cleanup if necessary
+        // Optional: any cleanup on background
+    }
+    
+    private struct ACMUserConfiguration: Codable {
+        let cutOutVoltage: Float
+        let cutInVoltage: Float
+        let autoCutoffEnabled: Bool
+        let alwaysOnChannels: [Bool]
+        let priorityChannels: [Bool]
+    }
+
+    func loadUserConfiguration() {
+        guard let data = UserDefaults.standard.data(forKey: "ACMUserConfiguration") else { return }
+        guard let decoded = try? JSONDecoder().decode(ACMUserConfiguration.self, from: data) else { return }
+        
+        // Restore the values
+        self.cutOutVoltage     = decoded.cutOutVoltage
+        self.cutInVoltage      = decoded.cutInVoltage
+        self.autoCutoffEnabled = decoded.autoCutoffEnabled
+        self.alwaysOnChannels  = decoded.alwaysOnChannels
+        self.priorityChannels  = decoded.priorityChannels
+    }
+
+    func saveUserConfiguration() {
+        let config = ACMUserConfiguration(
+            cutOutVoltage: self.cutOutVoltage,
+            cutInVoltage: self.cutInVoltage,
+            autoCutoffEnabled: self.autoCutoffEnabled,
+            alwaysOnChannels: self.alwaysOnChannels,
+            priorityChannels: self.priorityChannels
+        )
+        if let encoded = try? JSONEncoder().encode(config) {
+            UserDefaults.standard.set(encoded, forKey: "ACMUserConfiguration")
+        }
     }
     
     // MARK: - Connection Status Checker
@@ -200,6 +191,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         guard let peripheral = peripheral else {
             isConnected = false
             centralManager.scanForPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")], options: nil)
+            print("Peripheral not found. Scanning for peripherals...")
             return
         }
         
@@ -217,12 +209,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
     }
     
-    // MARK: - CBCentralManagerDelegate Methods
+    // MARK: - CBCentralManagerDelegate
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         print("Central Manager state updated: \(central.state.rawValue)")
         switch central.state {
         case .poweredOn:
-            // Attempt to retrieve and reconnect to the peripheral if possible
             if let peripheral = self.peripheral {
                 let connectedPeripherals = central.retrieveConnectedPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
                 if connectedPeripherals.contains(peripheral) {
@@ -237,7 +228,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 print("Scanning for peripherals...")
             }
         default:
-            print("Bluetooth is not available.")
+            print("Bluetooth is not available. State: \(central.state.rawValue)")
             isConnected = false
         }
     }
@@ -257,7 +248,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Connected to peripheral: \(peripheral.name ?? "Unknown")")
         DispatchQueue.main.async {
             self.isConnected = true
-            self.shouldUpdateSwitches = true // Enable switch updates on connection
+            self.shouldUpdateSwitches = true // Enable switch updates on (re)connection
         }
         peripheral.delegate = self
         peripheral.discoverServices([CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
@@ -283,14 +274,12 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     private func attemptReconnection() {
         guard let peripheral = peripheral else { return }
         print("Attempting to reconnect to \(peripheral.name ?? "Unknown") in 5 seconds...")
-        
-        // Delay reconnection attempts to avoid rapid retries
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
             self.centralManager.connect(peripheral, options: nil)
         }
     }
     
-    // MARK: - CBPeripheralDelegate Methods
+    // MARK: - CBPeripheralDelegate
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
             print("Error discovering services: \(error.localizedDescription)")
@@ -313,7 +302,6 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             for characteristic in characteristics {
                 if characteristic.uuid == CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8") {
                     self.characteristic = characteristic
-                    // Enable notifications to receive continuous updates
                     peripheral.setNotifyValue(true, for: characteristic)
                     print("Found characteristic: \(characteristic.uuid). Enabled notifications.")
                 }
@@ -334,6 +322,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     }
     
     // MARK: - Parsing Method for New Protocol
+    /// Parses the data string from the ESP32 for voltage/current info and accessory states.
     private func parseReceivedData(_ data: String) {
         DispatchQueue.main.async {
             print("Parsing data: \(data)")
@@ -353,17 +342,23 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 case "V": // Voltage and Current Section
                     let values = content.split(separator: ",")
                     if values.count == 7 {
+                        // Battery Voltage
                         self.batteryVoltage = Float(strtoul(String(values[0]), nil, 16)) / 100.0
+                        // Current Usage
                         self.currentUsage = Float(strtoul(String(values[1]), nil, 16)) / 100000.0
                         
+                        // Solar Voltage
                         self.solarVoltage = Float(strtoul(String(values[2]), nil, 16)) / 100000.0
+                        // Solar Current
                         self.solarCurrent = Float(strtoul(String(values[3]), nil, 16)) / 100.0
+                        // Solar Power
                         self.solarPower = Float(strtoul(String(values[4]), nil, 16)) / 100.0
+                        // Solar Charging State
                         self.solarCharging = Int(strtoul(String(values[5]), nil, 16))
+                        // Serial Connection State
                         self.serialState = (values[6] == "1")
                         
-                        
-                        // Debugging Prints
+                        // Debug prints
                         print("Battery Voltage Updated: \(self.batteryVoltage) V")
                         print("Current Usage Updated: \(self.currentUsage) A")
                         print("Solar Voltage Updated: \(self.solarVoltage) V")
@@ -374,93 +369,202 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     } else {
                         print("Invalid number of voltage/current values: \(values.count)")
                     }
-                case "L": // Load Channels Section
+                case "L": // Low Current Channels Section
                     let channels = content.split(separator: ",")
                     if channels.count != 8 {
                         print("Invalid number of LC channels: \(channels.count)")
                         break
                     }
                     for (index, channel) in channels.enumerated() {
-                        // Expected format: 0ff0 (State + Brightness + Current)
-                        if channel.count >= 4 { // Adjusted to handle 4 characters
+                        // Format: "1FF3E8" => Example (state + brightness + currentHex)
+                        // The code you have is somewhat simplified. Adjust parsing as needed:
+                        // In original code, it looked like stateHex + brightnessHex + currentHex
+                        // This part depends on your actual custom format
+                        
+                        if channel.count >= 4 {
                             let stateChar = channel.prefix(1)
                             let brightnessHex = channel.dropFirst(1).prefix(2)
-                            let currentHex = channel.dropFirst(3).prefix(1) // Adjust based on actual current data
+                            let currentHex = channel.dropFirst(3) // the rest are current
                             
-                            // Parse state
+                            // State
                             let state = (stateChar == "1")
+                            // Brightness from 0..255
+                            let brightnessValue = Float(strtoul(String(brightnessHex), nil, 16))
+                            let brightness = brightnessValue / 255.0
+                            // Current (assuming scaled by 1000 or 100?), you'll need to parse
+                            let currentFloat = Float(strtoul(String(currentHex), nil, 16)) / 1000.0
                             
-                            // Parse brightness
-                            let brightness = Float(strtoul(String(brightnessHex), nil, 16)) / 255.0
-                            
-                            // Parse current (assuming single hex digit for simplicity)
-                            let current = Float(strtoul(String(currentHex), nil, 16)) / 10.0 // Adjust divisor as needed
-                            
-                            // Update switch states only upon initial connection or reconnection
                             if self.shouldUpdateSwitches {
                                 self.lowCurrentStates[index] = state
                                 self.lowCurrentBrightness[index] = brightness
-                                self.lowCurrents[index] = current
-                                
-                                // Debugging Prints
-                                print("Parsed LC\(index + 1) - State: \(self.lowCurrentStates[index]), Brightness: \(self.lowCurrentBrightness[index]), Current: \(self.lowCurrents[index]) A")
+                                self.lowCurrents[index] = currentFloat
+                                print("Parsed LC\(index + 1) - State: \(state), Brightness: \(brightness), Current: \(currentFloat) A")
                             } else {
-                                // Only update brightness and current without altering the switch state
+                                // Only update brightness/current, do not override state
                                 self.lowCurrentBrightness[index] = brightness
-                                self.lowCurrents[index] = current
-                                
-                                print("Updated LC\(index + 1) Brightness to \(self.lowCurrentBrightness[index] * 100)%, Current to \(self.lowCurrents[index]) A")
+                                self.lowCurrents[index] = currentFloat
+                                print("Updated LC\(index + 1) Brightness: \(brightness), Current: \(currentFloat) A")
                             }
                         } else {
                             print("Invalid LC channel format: \(channel)")
                         }
                     }
                     if self.shouldUpdateSwitches {
-                        self.shouldUpdateSwitches = false // Reset the flag after updating switch states
+                        self.shouldUpdateSwitches = false
                     }
-                case "M": // Medium Channels Section
+                case "M": // Medium Current Channels Section
                     let channels = content.split(separator: ",")
                     if channels.count != 2 {
                         print("Invalid number of MC channels: \(channels.count)")
                         break
                     }
                     for (index, channel) in channels.enumerated() {
-                        // Expected format: 00 (State + Current)
-                        if channel.count >= 2 { // Adjusted to handle 2 characters
+                        // Format example: "13FA" => stateChar + currentHex
+                        if channel.count >= 2 {
                             let stateChar = channel.prefix(1)
-                            let currentHex = channel.dropFirst(1).prefix(1) // Adjust based on actual current data
+                            let currentHex = channel.dropFirst(1)
                             
-                            // Parse state
                             let state = (stateChar == "1")
+                            let currentFloat = Float(strtoul(String(currentHex), nil, 16)) / 1000.0
                             
-                            // Parse current (assuming single hex digit for simplicity)
-                            let current = Float(strtoul(String(currentHex), nil, 16)) / 10.0 // Adjust divisor as needed
-                            
-                            // Update switch states only upon initial connection or reconnection
                             if self.shouldUpdateSwitches {
                                 self.mediumCurrentStates[index] = state
-                                self.mediumCurrents[index] = current
-                                
-                                // Debugging Prints
-                                print("Parsed MC\(index + 1) - State: \(self.mediumCurrentStates[index]), Current: \(self.mediumCurrents[index]) A")
+                                self.mediumCurrents[index] = currentFloat
+                                print("Parsed MC\(index + 1) - State: \(state), Current: \(currentFloat) A")
                             } else {
-                                // Only update current without altering the switch state
-                                self.mediumCurrents[index] = current
-                                
-                                print("Updated MC\(index + 1) Current to \(self.mediumCurrents[index]) A")
+                                self.mediumCurrents[index] = currentFloat
+                                print("Updated MC\(index + 1) Current: \(currentFloat) A")
                             }
                         } else {
                             print("Invalid MC channel format: \(channel)")
                         }
                     }
                     if self.shouldUpdateSwitches {
-                        self.shouldUpdateSwitches = false // Reset the flag after updating switch states
+                        self.shouldUpdateSwitches = false
                     }
+                case "I":
+                    let invValueHex = String(content)
+                    let invValueInt = strtoul(invValueHex, nil, 16) // e.g. 0x000F => 15 decimal
+                    let voltageFloat = Float(invValueInt) / 100.0   // scale by 100
+                    // - <= 0.2 V => OFF
+                    // - <= 0.6 V => ON
+                    // - else => ERROR
+                    if voltageFloat <= 0.3 {
+                        self.inverterState = .off
+                    } else if voltageFloat <= 0.7 {
+                        self.inverterState = .on
+                    } else {
+                        self.inverterState = .error
+                    }
+//                    print("Inverter voltage: \(voltageFloat), state: \(inverterState)")
                 default:
                     print("Unknown data component: \(section)")
                 }
             }
+            
+            // After parsing everything, update the subsystem objects so the UI refreshes in real-time
+            self.updateSubsystems()
         }
+    }
+    
+    func estimateLFPBatteryPercentage(voltage: Float) -> Float {
+        // Voltage-capacity data extracted from the image
+        let voltageCapacityData: [(voltage: Float, capacity: Float)] = [
+            (14.4, 100),
+            (13.6, 100),
+            (13.4, 99),
+            (13.3, 90),
+            (13.2, 70),
+            (13.1, 40),
+            (13.0, 30),
+            (12.9, 20),
+            (12.8, 17),
+            (12.5, 14),
+            (12.0, 9),
+            (10.0, 0)
+        ]
+
+        // Clamp the input voltage to the range of the data
+        let clampedVoltage = max(min(voltage, 14.4), 10.0)
+
+        // Perform piecewise linear interpolation
+        for i in 1..<voltageCapacityData.count {
+            let (v1, c1) = voltageCapacityData[i - 1]
+            let (v2, c2) = voltageCapacityData[i]
+
+            if clampedVoltage >= v2 && clampedVoltage <= v1 {
+                // Linear interpolation formula
+                return c1 + (clampedVoltage - v1) * (c2 - c1) / (v2 - v1)
+            }
+        }
+
+        return 0 // Default to 0% if something goes wrong
+    }
+
+    
+    // MARK: - Updating Subsystems
+    /// Called after parsing new BLE data to rebuild the subsystem objects for real-time UI updates.
+    private func updateSubsystems() {
+        let solarChargingState = SolarChargingState(rawValue: solarCharging) ?? .unknown
+        
+        // Battery Subsystem
+        batterySubsystem.name = "Battery"
+    
+        let estimatedPercentage = estimateLFPBatteryPercentage(voltage: batteryVoltage)
+            
+        
+        batterySubsystem.state = String(format: "%.0f%%", estimatedPercentage)  // Just using batteryPercentage
+        batterySubsystem.dataItems = [
+            DataItem(
+                title: "Battery Voltage",
+                value: String(format: "%.2f V", batteryVoltage),
+                state: "Normal",
+                isDisabled: false
+            ),
+            DataItem(
+                title: "Current Usage",
+                value: String(format: "%.2f A", currentUsage),
+                state: "Normal",
+                isDisabled: false
+            ),
+            DataItem(
+                title: "Battery Percentage",
+                value: String(format: "%.2f%", estimatedPercentage),
+                state: "Normal",
+                isDisabled: false,
+                type: .batteryPercentage
+            )
+        ]
+        
+        // Solar Subsystem
+        solarSubsystem.name = "Solar"
+        solarSubsystem.state = solarChargingState.description
+        solarSubsystem.dataItems = [
+            DataItem(
+                title: "Solar Voltage",
+                value: String(format: "%.2f V", solarVoltage),
+                state: solarChargingState.description,
+                isDisabled: !serialState
+            ),
+            DataItem(
+                title: "Solar Current",
+                value: String(format: "%.2f A", solarCurrent),
+                state: solarChargingState.description,
+                isDisabled: !serialState
+            ),
+            DataItem(
+                title: "Solar Power",
+                value: String(format: "%.2f W", solarPower),
+                state: solarChargingState.description,
+                isDisabled: !serialState
+            ),
+            DataItem(
+                title: "Solar State",
+                value: solarChargingState.description,
+                state: solarChargingState.description,
+                isDisabled: !serialState
+            )
+        ]
     }
     
     // MARK: - Send Configuration to ESP32
@@ -470,13 +574,14 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             return
         }
         
-        // Convert configuration options to command string
+        // Convert config options to command string
         let configString = "CONFIG CO\(String(format: "%.2f", cutOutVoltage)) CI\(String(format: "%.2f", cutInVoltage)) AC\(autoCutoffEnabled ? "1" : "0") AO\(alwaysOnChannels.map { $0 ? "1" : "0" }.joined()) PR\(priorityChannels.map { $0 ? "1" : "0" }.joined())"
         
-        // Send configuration
         if let data = configString.data(using: .utf8) {
             peripheral?.writeValue(data, for: characteristic, type: .withResponse)
             print("Sent configuration: \(configString)")
+            // Save to UserDefaults so we have a local copy
+            saveUserConfiguration()
         } else {
             print("Failed to encode configuration string.")
         }
@@ -488,7 +593,6 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             print("Invalid index for low current state.")
             return
         }
-        
         let command = "L\(index + 1)\(state ? "1" : "0")"
         print("Sending command to set LC\(index + 1) to \(state ? "ON" : "OFF")")
         controlAccessory(command: command)
@@ -500,12 +604,12 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             print("Invalid index for medium current state.")
             return
         }
-        
         let command = "M\(index + 1)\(state ? "1" : "0")"
         print("Sending command to set MC\(index + 1) to \(state ? "ON" : "OFF")")
         controlAccessory(command: command)
     }
     
+    // MARK: - Inverter State (Example)
     func setInverterState(index: Int, state: Bool) {
         let command = "I\(index + 1)\(state ? "1" : "0")"
         print("Sending command to set Inverter\(index + 1) to \(state ? "ON" : "OFF")")
@@ -568,5 +672,3 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Renamed MC\(index + 1) to \(newName)")
     }
 }
-
-
