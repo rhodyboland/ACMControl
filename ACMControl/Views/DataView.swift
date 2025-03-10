@@ -134,7 +134,8 @@ struct DataView: View {
     var subsystems: [Subsystem] {
         [
             bluetoothManager.batterySubsystem,
-            bluetoothManager.solarSubsystem
+            bluetoothManager.solarSubsystem,
+            bluetoothManager.sensorSubsystem
         ]
     }
     
