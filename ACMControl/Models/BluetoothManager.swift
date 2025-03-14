@@ -15,6 +15,31 @@ enum InverterState {
     case error
 }
 
+/// Represents the various data points we might want to show on CarPlay.
+enum CarPlayDataKey: String, CaseIterable, Codable {
+    case batteryVoltage
+    case currentUsage
+    case batteryPercentage
+    case batteryTemp1
+    case solarVoltage
+    case solarCurrent
+    case solarPower
+    case sensor1
+    
+    var displayName: String {
+        switch self {
+        case .batteryVoltage:    return "Battery Voltage"
+        case .currentUsage:      return "Current Usage"
+        case .batteryPercentage: return "Battery SOC"
+        case .batteryTemp1:      return "Battery Temp 1"
+        case .solarVoltage:      return "Solar Voltage"
+        case .solarCurrent:      return "Solar Current"
+        case .solarPower:        return "Solar Power"
+        case .sensor1:           return "Sensor 1"
+        }
+    }
+}
+
 
 
 /// A class responsible for handling all Bluetooth interactions with the ESP32-based ACM module.
@@ -24,6 +49,8 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristic: CBCharacteristic?
+    
+    static let shared = BluetoothManager()
     
     // MARK: - Published Properties (Battery / Solar Data)
     @Published var batteryPercentage: Float = 50
@@ -129,8 +156,46 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     // Flag to control switch updates (once on connection)
     private var shouldUpdateSwitches: Bool = false
     
+    // MARK: - CarPlay Data Selection
+    /// Which data items the user wants to see on CarPlay. Defaults to 4 items.
+    @Published var selectedCarPlayDataKeys: [CarPlayDataKey] = [
+        .batteryVoltage,
+        .currentUsage,
+        .batteryPercentage,
+        .batteryTemp1
+    ]
+    /// Which outputs the user wants to see in CarPlay’s control screen. Defaults to first 4 low-current.
+    @Published var selectedCarPlayOutputs: [Int] = [0, 1, 2, 3]
     
-
+    // A helper to retrieve a textual value for each CarPlayDataKey
+    func getCarPlayValue(for key: CarPlayDataKey) -> String {
+        switch key {
+        case .batteryVoltage:
+            return String(format: "%.2f V", batteryVoltage)
+        case .currentUsage:
+            return String(format: "%.2f A", currentUsage)
+        case .batteryPercentage:
+            // Depending on whether serialState2 is off, you might do an LFP estimate.
+            // For simplicity, just use batteryPercentage as is:
+            return String(format: "%.0f%%", batteryPercentage)
+        case .batteryTemp1:
+            return String(format: "%.1f °C", batteryCellTemp1)
+        case .solarVoltage:
+            return String(format: "%.2f V", solarVoltage)
+        case .solarCurrent:
+            return String(format: "%.2f A", solarCurrent)
+        case .solarPower:
+            return String(format: "%.2f W", solarPower)
+        case .sensor1:
+            return String(format: "%.2f °C", sensor1)
+        }
+    }
+    
+    // MARK: - Loading & Saving for CarPlay
+    private struct CarPlayUserConfig: Codable {
+        let dataKeys: [CarPlayDataKey]
+        let outputIndices: [Int]
+    }
     
     // MARK: - Initialization
     override init() {
@@ -154,6 +219,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         super.init()
         // Attempt to load existing configuration from user defaults
         loadUserConfiguration()
+        loadCarPlayConfiguration()
         centralManager = CBCentralManager(delegate: self, queue: nil)
         loadOutputNames()
         
@@ -213,6 +279,22 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         )
         if let encoded = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(encoded, forKey: "ACMUserConfiguration")
+        }
+    }
+    func loadCarPlayConfiguration() {
+        guard let data = UserDefaults.standard.data(forKey: "CarPlayUserConfig") else { return }
+        guard let decoded = try? JSONDecoder().decode(CarPlayUserConfig.self, from: data) else { return }
+        self.selectedCarPlayDataKeys = decoded.dataKeys
+        self.selectedCarPlayOutputs  = decoded.outputIndices
+    }
+    
+    func saveCarPlayConfiguration() {
+        let config = CarPlayUserConfig(
+            dataKeys: self.selectedCarPlayDataKeys,
+            outputIndices: self.selectedCarPlayOutputs
+        )
+        if let encoded = try? JSONEncoder().encode(config) {
+            UserDefaults.standard.set(encoded, forKey: "CarPlayUserConfig")
         }
     }
     
@@ -346,7 +428,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
         if let value = characteristic.value {
             let receivedString = String(decoding: value, as: UTF8.self)
-            print("Received data: \(receivedString)")
+//            print("Received data: \(receivedString)")
             parseReceivedData(receivedString)
         }
     }
@@ -355,7 +437,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     /// Parses the data string from the ESP32 for voltage/current info and accessory states.
     private func parseReceivedData(_ data: String) {
         DispatchQueue.main.async {
-            print("Parsing data: \(data)")
+//            print("Parsing data: \(data)")
             
             // Split the received string by sections
             let sections = data.split(separator: ";")
@@ -408,18 +490,18 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         self.serialState2 = (values[12] == "1")
                         
                         // Debug prints
-                        print("Battery Voltage Updated: \(self.batteryVoltage) V")
-                        print("Current Usage Updated: \(self.currentUsage) A")
-                        print("Solar Voltage Updated: \(self.solarVoltage) V")
-                        print("Solar Current Updated: \(self.solarCurrent) A")
-                        print("Solar Power Updated: \(self.solarPower) W")
-                        print("Solar Charging Updated: \(self.solarCharging)")
-                        print("Battery Cell Voltage Avg Updated: \(self.batteryCellVoltage) V")
-                        print("Battery Cell Temp1 Updated: \(self.batteryCellTemp1) C")
-                        print("Battery SOC Updated: \(self.batteryPercentage) %")
-                        print("Sensor 1 Updated: \(self.sensor1) C")
-                        print("Serial ConnectionVictron: \(self.serialState)")
-                        print("Serial ConnectionBMS: \(self.serialState2)")
+//                        print("Battery Voltage Updated: \(self.batteryVoltage) V")
+//                        print("Current Usage Updated: \(self.currentUsage) A")
+//                        print("Solar Voltage Updated: \(self.solarVoltage) V")
+//                        print("Solar Current Updated: \(self.solarCurrent) A")
+//                        print("Solar Power Updated: \(self.solarPower) W")
+//                        print("Solar Charging Updated: \(self.solarCharging)")
+//                        print("Battery Cell Voltage Avg Updated: \(self.batteryCellVoltage) V")
+//                        print("Battery Cell Temp1 Updated: \(self.batteryCellTemp1) C")
+//                        print("Battery SOC Updated: \(self.batteryPercentage) %")
+//                        print("Sensor 1 Updated: \(self.sensor1) C")
+//                        print("Serial ConnectionVictron: \(self.serialState)")
+//                        print("Serial ConnectionBMS: \(self.serialState2)")
                     } else {
                         print("Invalid number of voltage/current values: \(values.count)")
                     }
@@ -457,7 +539,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                                 // Only update brightness/current, do not override state
                                 self.lowCurrentBrightness[index] = brightness
                                 self.lowCurrents[index] = currentFloat
-                                print("Updated LC\(index + 1) Brightness: \(brightness), Current: \(currentFloat) A")
+//                                print("Updated LC\(index + 1) Brightness: \(brightness), Current: \(currentFloat) A")
                             }
                         } else {
                             print("Invalid LC channel format: \(channel)")
@@ -487,7 +569,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                                 print("Parsed MC\(index + 1) - State: \(state), Current: \(currentFloat) A")
                             } else {
                                 self.mediumCurrents[index] = currentFloat
-                                print("Updated MC\(index + 1) Current: \(currentFloat) A")
+//                                print("Updated MC\(index + 1) Current: \(currentFloat) A")
                             }
                         } else {
                             print("Invalid MC channel format: \(channel)")
@@ -691,6 +773,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             print("Invalid index for low current state.")
             return
         }
+        self.lowCurrentStates[index] = state
         let command = "L\(index + 1)\(state ? "1" : "0")"
         print("Sending command to set LC\(index + 1) to \(state ? "ON" : "OFF")")
         controlAccessory(command: command)
@@ -702,6 +785,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             print("Invalid index for medium current state.")
             return
         }
+        self.mediumCurrentStates[index] = state
         let command = "M\(index + 1)\(state ? "1" : "0")"
         print("Sending command to set MC\(index + 1) to \(state ? "ON" : "OFF")")
         controlAccessory(command: command)

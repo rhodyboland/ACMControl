@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct ACMControlApp: App {
+//    @StateObject var bluetoothManager = BluetoothManager.shared  // or new instance, but typically shared
+        
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
     }
 }
+

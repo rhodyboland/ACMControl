@@ -8,8 +8,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject var bluetoothManager = BluetoothManager()
-    
+//    @StateObject var bluetoothManager = BluetoothManager()
+    @StateObject var bluetoothManager = BluetoothManager.shared  // or new instance, but typically shared
+//
     // Side Menu State
     @State private var isShowingSideMenu = false
     
