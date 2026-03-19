@@ -9,6 +9,13 @@ import CoreBluetooth
 import SwiftUI
 import UIKit
 
+struct ACMDiscoveredDevice: Identifiable, Equatable {
+    let id: UUID
+    let serialNumber: String
+    let displayName: String
+    let rssi: Int
+}
+
 enum InverterState {
     case off
     case on
@@ -40,15 +47,104 @@ enum CarPlayDataKey: String, CaseIterable, Codable {
     }
 }
 
+enum BatteryDetailsProtocol: String, CaseIterable, Codable, Identifiable {
+    case jkBms = "JK"
+    case victronBMV = "BMV"
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .jkBms:
+            return "JK BMS"
+        case .victronBMV:
+            return "Victron BMV Shunt"
+        }
+    }
+}
+
+enum SolarChargerProtocol: String, CaseIterable, Codable, Identifiable {
+    case victron = "VIC"
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .victron:
+            return "Victron VE.Direct"
+        }
+    }
+}
+
+enum SensorInputType: String, CaseIterable, Codable, Identifiable {
+    case none
+    case temperature
+    case analogVoltage
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .none:
+            return "Not Installed"
+        case .temperature:
+            return "Temperature Sensor"
+        case .analogVoltage:
+            return "Analog Voltage"
+        }
+    }
+}
+
+enum ExternalSwitchType: String, CaseIterable, Codable, Identifiable {
+    case none
+    case toggleInput
+    case momentaryInput
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .none:
+            return "Not Installed"
+        case .toggleInput:
+            return "Toggle Switch"
+        case .momentaryInput:
+            return "Momentary Switch"
+        }
+    }
+}
+
+enum InverterControlMode: String, CaseIterable, Codable, Identifiable {
+    case lowCurrentEnable
+    case stateSense
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .lowCurrentEnable:
+            return "Low Current Enable"
+        case .stateSense:
+            return "Enable + State Sense"
+        }
+    }
+}
+
 
 
 /// A class responsible for handling all Bluetooth interactions with the ESP32-based ACM module.
 /// It exposes published properties for battery, solar, and channel states, as well as the Subsystem objects for real-time UI updates.
 class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
+    private static let serviceUUID = CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")
+    private static let characteristicUUID = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
+    private static let deviceNamePrefix = "ESP32_ACM_"
+    private static let legacyDeviceName = "ESP32_ACM"
+    
     // MARK: - Bluetooth Properties
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristic: CBCharacteristic?
+    private var discoveredPeripheralsBySerial: [String: CBPeripheral] = [:]
     
     static let shared = BluetoothManager()
     
@@ -145,6 +241,20 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var autoCutoffEnabled: Bool = true
     @Published var alwaysOnChannels: [Bool] = Array(repeating: false, count: 10)
     @Published var priorityChannels: [Bool] = Array(repeating: false, count: 10)
+    @Published var advancedBatteryDetailsEnabled: Bool = false
+    @Published var batteryDetailsProtocol: BatteryDetailsProtocol = .jkBms
+    @Published var solarChargerEnabled: Bool = false
+    @Published var solarChargerProtocol: SolarChargerProtocol = .victron
+    @Published var sensorsEnabled: Bool = false
+    @Published var sensor1Type: SensorInputType = .temperature
+    @Published var sensor2Type: SensorInputType = .none
+    @Published var externalSwitch1Type: ExternalSwitchType = .none
+    @Published var externalSwitch2Type: ExternalSwitchType = .none
+    @Published var inverterControlEnabled: Bool = false
+    @Published var inverterControlMode: InverterControlMode = .lowCurrentEnable
+    @Published var ledBrightnessEnabled: Bool = true
+    @Published var bmvConsumedAmpHours: Float = 0.0
+    @Published var bmvTimeToGoMinutes: Int = 0
     
     // MARK: - Published Property for Output Names
     @Published var lowCurrentOutputNames: [String] = (1...8).map { "LC\($0)" }
@@ -152,6 +262,10 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     
     // MARK: - Published Property for Connection Status
     @Published var isConnected: Bool = false
+    @Published var pairedSerialNumber: String? = nil
+    @Published var connectedSerialNumber: String? = nil
+    @Published var discoveredDevices: [ACMDiscoveredDevice] = []
+    @Published var isScanningForPairing: Bool = false
     
     // Flag to control switch updates (once on connection)
     private var shouldUpdateSwitches: Bool = false
@@ -179,14 +293,21 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             // For simplicity, just use batteryPercentage as is:
             return String(format: "%.0f%%", batteryPercentage)
         case .batteryTemp1:
+            if !advancedBatteryDetailsEnabled {
+                return "Not Installed"
+            }
             return String(format: "%.1f °C", batteryCellTemp1)
         case .solarVoltage:
+            if !isSolarAvailable { return "Not Installed" }
             return String(format: "%.2f V", solarVoltage)
         case .solarCurrent:
+            if !isSolarAvailable { return "Not Installed" }
             return String(format: "%.2f A", solarCurrent)
         case .solarPower:
+            if !isSolarAvailable { return "Not Installed" }
             return String(format: "%.2f W", solarPower)
         case .sensor1:
+            if !sensorsEnabled { return "Not Installed" }
             return String(format: "%.2f °C", sensor1)
         }
     }
@@ -255,6 +376,19 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         let autoCutoffEnabled: Bool
         let alwaysOnChannels: [Bool]
         let priorityChannels: [Bool]
+        let advancedBatteryDetailsEnabled: Bool?
+        let batteryDetailsProtocol: BatteryDetailsProtocol?
+        let solarChargerEnabled: Bool?
+        let solarChargerProtocol: SolarChargerProtocol?
+        let sensorsEnabled: Bool?
+        let sensor1Type: SensorInputType?
+        let sensor2Type: SensorInputType?
+        let externalSwitch1Type: ExternalSwitchType?
+        let externalSwitch2Type: ExternalSwitchType?
+        let inverterControlEnabled: Bool?
+        let inverterControlMode: InverterControlMode?
+        let ledBrightnessEnabled: Bool?
+        let pairedSerialNumber: String?
     }
 
     func loadUserConfiguration() {
@@ -267,6 +401,21 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         self.autoCutoffEnabled = decoded.autoCutoffEnabled
         self.alwaysOnChannels  = decoded.alwaysOnChannels
         self.priorityChannels  = decoded.priorityChannels
+        self.advancedBatteryDetailsEnabled = decoded.advancedBatteryDetailsEnabled ?? false
+        self.batteryDetailsProtocol = decoded.batteryDetailsProtocol ?? .jkBms
+        self.solarChargerEnabled = decoded.solarChargerEnabled ?? false
+        self.solarChargerProtocol = decoded.solarChargerProtocol ?? .victron
+        self.sensorsEnabled = decoded.sensorsEnabled ?? false
+        self.sensor1Type = decoded.sensor1Type ?? .temperature
+        self.sensor2Type = decoded.sensor2Type ?? .none
+        self.externalSwitch1Type = decoded.externalSwitch1Type ?? .none
+        self.externalSwitch2Type = decoded.externalSwitch2Type ?? .none
+        self.inverterControlEnabled = decoded.inverterControlEnabled ?? false
+        self.inverterControlMode = decoded.inverterControlMode ?? .lowCurrentEnable
+        self.ledBrightnessEnabled = decoded.ledBrightnessEnabled ?? true
+        self.pairedSerialNumber = decoded.pairedSerialNumber
+        applyFeatureDependencies()
+        sanitizeCarPlaySelections()
     }
 
     func saveUserConfiguration() {
@@ -275,7 +424,20 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             cutInVoltage: self.cutInVoltage,
             autoCutoffEnabled: self.autoCutoffEnabled,
             alwaysOnChannels: self.alwaysOnChannels,
-            priorityChannels: self.priorityChannels
+            priorityChannels: self.priorityChannels,
+            advancedBatteryDetailsEnabled: self.advancedBatteryDetailsEnabled,
+            batteryDetailsProtocol: self.batteryDetailsProtocol,
+            solarChargerEnabled: self.solarChargerEnabled,
+            solarChargerProtocol: self.solarChargerProtocol,
+            sensorsEnabled: self.sensorsEnabled,
+            sensor1Type: self.sensor1Type,
+            sensor2Type: self.sensor2Type,
+            externalSwitch1Type: self.externalSwitch1Type,
+            externalSwitch2Type: self.externalSwitch2Type,
+            inverterControlEnabled: self.inverterControlEnabled,
+            inverterControlMode: self.inverterControlMode,
+            ledBrightnessEnabled: self.ledBrightnessEnabled,
+            pairedSerialNumber: self.pairedSerialNumber
         )
         if let encoded = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(encoded, forKey: "ACMUserConfiguration")
@@ -298,25 +460,172 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
     }
     
+    var isVictronBMVSelected: Bool {
+        advancedBatteryDetailsEnabled && batteryDetailsProtocol == .victronBMV
+    }
+    
+    var isSolarAvailable: Bool {
+        solarChargerEnabled && !isVictronBMVSelected
+    }
+    
+    var availableCarPlayDataKeys: [CarPlayDataKey] {
+        CarPlayDataKey.allCases.filter { key in
+            switch key {
+            case .solarVoltage, .solarCurrent, .solarPower:
+                return isSolarAvailable
+            case .sensor1:
+                return sensorsEnabled
+            case .batteryTemp1:
+                return advancedBatteryDetailsEnabled
+            default:
+                return true
+            }
+        }
+    }
+    
+    func applyFeatureDependencies() {
+        if isVictronBMVSelected {
+            solarChargerEnabled = false
+        }
+        
+        if !advancedBatteryDetailsEnabled {
+            bmvConsumedAmpHours = 0
+            bmvTimeToGoMinutes = 0
+        }
+        
+        sanitizeCarPlaySelections()
+    }
+    
+    func sanitizeCarPlaySelections() {
+        let availableKeys = Set(availableCarPlayDataKeys)
+        selectedCarPlayDataKeys = selectedCarPlayDataKeys.filter { availableKeys.contains($0) }
+        
+        if selectedCarPlayDataKeys.isEmpty {
+            selectedCarPlayDataKeys = availableCarPlayDataKeys.prefix(4).map { $0 }
+        }
+    }
+    
+    private func activeBatteryProtocolCode() -> String {
+        guard advancedBatteryDetailsEnabled else { return "NONE" }
+        return batteryDetailsProtocol.rawValue
+    }
+    
+    private func activeSolarProtocolCode() -> String {
+        guard isSolarAvailable else { return "NONE" }
+        return solarChargerProtocol.rawValue
+    }
+    
+    private func formattedTimeToGo() -> String {
+        guard bmvTimeToGoMinutes > 0 else { return "Unavailable" }
+        let hours = bmvTimeToGoMinutes / 60
+        let minutes = bmvTimeToGoMinutes % 60
+        if hours == 0 {
+            return "\(minutes) min"
+        }
+        return "\(hours)h \(minutes)m"
+    }
+    
+    var pairedDeviceLabel: String {
+        pairedSerialNumber ?? "No ACM Paired"
+    }
+    
+    private func serialNumber(from peripheralName: String?) -> String? {
+        guard let peripheralName else { return nil }
+        guard peripheralName.hasPrefix(Self.deviceNamePrefix) else { return nil }
+        let serial = String(peripheralName.dropFirst(Self.deviceNamePrefix.count))
+        return serial.isEmpty ? nil : serial
+    }
+    
+    private func updateDiscoveredDevice(_ peripheral: CBPeripheral, rssi: NSNumber) {
+        guard let serialNumber = serialNumber(from: peripheral.name) else { return }
+        
+        discoveredPeripheralsBySerial[serialNumber] = peripheral
+        
+        let device = ACMDiscoveredDevice(
+            id: peripheral.identifier,
+            serialNumber: serialNumber,
+            displayName: peripheral.name ?? serialNumber,
+            rssi: rssi.intValue
+        )
+        
+        if let existingIndex = discoveredDevices.firstIndex(where: { $0.serialNumber == serialNumber }) {
+            discoveredDevices[existingIndex] = device
+        } else {
+            discoveredDevices.append(device)
+            discoveredDevices.sort { $0.serialNumber < $1.serialNumber }
+        }
+    }
+    
+    private func startScanning() {
+        guard centralManager.state == .poweredOn else { return }
+        centralManager.scanForPeripherals(withServices: [Self.serviceUUID], options: nil)
+    }
+    
+    func startPairingScan() {
+        discoveredDevices = []
+        discoveredPeripheralsBySerial = [:]
+        isScanningForPairing = true
+        startScanning()
+    }
+    
+    func stopPairingScan() {
+        isScanningForPairing = false
+        centralManager.stopScan()
+    }
+    
+    func pair(with device: ACMDiscoveredDevice) {
+        pairedSerialNumber = device.serialNumber
+        saveUserConfiguration()
+        stopPairingScan()
+        
+        if let currentPeripheral = peripheral, currentPeripheral.identifier != device.id {
+            centralManager.cancelPeripheralConnection(currentPeripheral)
+        }
+        
+        guard let targetPeripheral = discoveredPeripheralsBySerial[device.serialNumber] else { return }
+        peripheral = targetPeripheral
+        characteristic = nil
+        connectedSerialNumber = device.serialNumber
+        centralManager.connect(targetPeripheral, options: nil)
+    }
+    
+    func clearPairing() {
+        pairedSerialNumber = nil
+        connectedSerialNumber = nil
+        saveUserConfiguration()
+        if let currentPeripheral = peripheral {
+            centralManager.cancelPeripheralConnection(currentPeripheral)
+        }
+    }
+    
+    private func shouldAutoConnect(to peripheral: CBPeripheral) -> Bool {
+        if let pairedSerialNumber {
+            return serialNumber(from: peripheral.name) == pairedSerialNumber
+        }
+        
+        return peripheral.name == Self.legacyDeviceName
+    }
+    
     // MARK: - Connection Status Checker
     private func checkConnectionStatus() {
         guard let peripheral = peripheral else {
             isConnected = false
-            centralManager.scanForPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")], options: nil)
+            startScanning()
             print("Peripheral not found. Scanning for peripherals...")
             return
         }
         
         // Check if the peripheral is already connected
-        let connectedPeripherals = centralManager.retrieveConnectedPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
+        let connectedPeripherals = centralManager.retrieveConnectedPeripherals(withServices: [Self.serviceUUID])
         if connectedPeripherals.contains(peripheral) {
             isConnected = true
+            connectedSerialNumber = serialNumber(from: peripheral.name)
             peripheral.delegate = self
-            peripheral.discoverServices([CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
+            peripheral.discoverServices([Self.serviceUUID])
             print("Peripheral is already connected.")
         } else {
             isConnected = false
-            centralManager.scanForPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")], options: nil)
+            startScanning()
             print("Peripheral not connected. Scanning for peripherals...")
         }
     }
@@ -327,16 +636,16 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         switch central.state {
         case .poweredOn:
             if let peripheral = self.peripheral {
-                let connectedPeripherals = central.retrieveConnectedPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
+                let connectedPeripherals = central.retrieveConnectedPeripherals(withServices: [Self.serviceUUID])
                 if connectedPeripherals.contains(peripheral) {
                     centralManager.connect(peripheral, options: nil)
                     print("Reconnecting to peripheral: \(peripheral.name ?? "Unknown")")
                 } else {
-                    centralManager.scanForPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")], options: nil)
+                    startScanning()
                     print("Scanning for peripherals...")
                 }
             } else {
-                centralManager.scanForPeripherals(withServices: [CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")], options: nil)
+                startScanning()
                 print("Scanning for peripherals...")
             }
         default:
@@ -348,11 +657,13 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String : Any], rssi RSSI: NSNumber) {
         print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
-        if peripheral.name == "ESP32_ACM" {
+        updateDiscoveredDevice(peripheral, rssi: RSSI)
+        
+        if shouldAutoConnect(to: peripheral) {
             self.peripheral = peripheral
             centralManager.stopScan()
             centralManager.connect(peripheral, options: nil)
-            print("Connecting to ESP32_ACM...")
+            print("Connecting to \(peripheral.name ?? "Unknown")...")
         }
     }
     
@@ -360,10 +671,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Connected to peripheral: \(peripheral.name ?? "Unknown")")
         DispatchQueue.main.async {
             self.isConnected = true
+            self.connectedSerialNumber = self.serialNumber(from: peripheral.name)
             self.shouldUpdateSwitches = true // Enable switch updates on (re)connection
         }
         peripheral.delegate = self
-        peripheral.discoverServices([CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")])
+        peripheral.discoverServices([Self.serviceUUID])
     }
     
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -378,6 +690,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Disconnected from peripheral: \(peripheral.name ?? "Unknown"), error: \(error?.localizedDescription ?? "No Error")")
         DispatchQueue.main.async {
             self.isConnected = false
+            self.connectedSerialNumber = nil
         }
         attemptReconnection()
     }
@@ -387,7 +700,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         guard let peripheral = peripheral else { return }
         print("Attempting to reconnect to \(peripheral.name ?? "Unknown") in 5 seconds...")
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.centralManager.connect(peripheral, options: nil)
+            if self.shouldAutoConnect(to: peripheral) {
+                self.centralManager.connect(peripheral, options: nil)
+            } else {
+                self.startScanning()
+            }
         }
     }
     
@@ -400,7 +717,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         if let services = peripheral.services {
             for service in services {
                 print("Discovered service: \(service.uuid)")
-                peripheral.discoverCharacteristics([CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")], for: service)
+                peripheral.discoverCharacteristics([Self.characteristicUUID], for: service)
             }
         }
     }
@@ -412,7 +729,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
         if let characteristics = service.characteristics {
             for characteristic in characteristics {
-                if characteristic.uuid == CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8") {
+                if characteristic.uuid == Self.characteristicUUID {
                     self.characteristic = characteristic
                     peripheral.setNotifyValue(true, for: characteristic)
                     print("Found characteristic: \(characteristic.uuid). Enabled notifications.")
@@ -593,6 +910,16 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         self.inverterState = .error
                     }
 //                    print("Inverter voltage: \(voltageFloat), state: \(inverterState)")
+                case "B":
+                    let values = content.split(separator: ",")
+                    if values.count == 2 {
+                        self.bmvConsumedAmpHours = (Float(values[0]) ?? 0.0) / 1000.0
+                        self.bmvTimeToGoMinutes = Int(values[1]) ?? 0
+                    } else {
+                        print("Invalid number of BMV values: \(values.count)")
+                    }
+                case "SN":
+                    self.connectedSerialNumber = String(content)
                 default:
                     print("Unknown data component: \(section)")
                 }
@@ -664,8 +991,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         
                 
         
-        batterySubsystem.state = String(format: "%.0f%%", estimatedPercentage)  // Just using batteryPercentage
-        batterySubsystem.dataItems = [
+        var batteryItems: [DataItem] = [
             DataItem(
                 title: "Battery Voltage",
                 value: String(format: "%.2f V", batteryVoltage),
@@ -680,28 +1006,67 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             ),
             DataItem(
                 title: "Battery Charge",
-                value: String(format: "%.0f% ", estimatedPercentage),
+                value: String(format: "%.0f%%", estimatedPercentage),
                 state: "Normal",
                 isDisabled: false,
                 type: .batteryPercentage
-                
-            ),DataItem(
+            ),
+            DataItem(
                 title: "Battery State",
                 value: batteryChargingState.description,
                 state: "Normal",
                 isDisabled: false
-            ),DataItem(
-                title: "Battery Temp 1",
-                value: String(format: "%.0f C", batteryCellTemp1),
-                state: "Normal",
-                isDisabled: !serialState2
-            ),DataItem(
-                title: "Battery Avg Cell",
-                value: String(format: "%.2f V", batteryCellVoltage),
-                state: "Normal",
-                isDisabled: !serialState2
             )
         ]
+        
+        if advancedBatteryDetailsEnabled {
+            if batteryDetailsProtocol == .jkBms {
+                batteryItems.append(
+                    DataItem(
+                        title: "Battery Temp 1",
+                        value: String(format: "%.0f C", batteryCellTemp1),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+                batteryItems.append(
+                    DataItem(
+                        title: "Battery Avg Cell",
+                        value: String(format: "%.2f V", batteryCellVoltage),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+            } else if batteryDetailsProtocol == .victronBMV {
+                batteryItems.append(
+                    DataItem(
+                        title: "Battery Temperature",
+                        value: String(format: "%.0f C", batteryCellTemp1),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+                batteryItems.append(
+                    DataItem(
+                        title: "Consumed Ah",
+                        value: String(format: "%.1f Ah", bmvConsumedAmpHours),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+                batteryItems.append(
+                    DataItem(
+                        title: "Time To Go",
+                        value: formattedTimeToGo(),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+            }
+        }
+        
+        batterySubsystem.state = String(format: "%.0f%%", estimatedPercentage)
+        batterySubsystem.dataItems = batteryItems
         
         // Solar Subsystem
         solarSubsystem.name = "Solar"
@@ -711,25 +1076,25 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 title: "Solar Voltage",
                 value: String(format: "%.2f V", solarVoltage),
                 state: solarChargingState.description,
-                isDisabled: !serialState
+                isDisabled: !serialState || !isSolarAvailable
             ),
             DataItem(
                 title: "Solar Current",
                 value: String(format: "%.2f A", solarCurrent),
                 state: solarChargingState.description,
-                isDisabled: !serialState
+                isDisabled: !serialState || !isSolarAvailable
             ),
             DataItem(
                 title: "Solar Power",
                 value: String(format: "%.2f W", solarPower),
                 state: solarChargingState.description,
-                isDisabled: !serialState
+                isDisabled: !serialState || !isSolarAvailable
             ),
             DataItem(
                 title: "Solar State",
                 value: solarChargingState.description,
                 state: solarChargingState.description,
-                isDisabled: !serialState
+                isDisabled: !serialState || !isSolarAvailable
             )
         ]
         
@@ -742,7 +1107,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 title: "Internal Temp Sensor",
                 value: String(format: "%.2f C", sensor1),
                 state: "Normal",
-                isDisabled: false
+                isDisabled: !sensorsEnabled
             )
         ]
     }
@@ -755,7 +1120,9 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
         
         // Convert config options to command string
-        let configString = "CONFIG CO\(String(format: "%.2f", cutOutVoltage)) CI\(String(format: "%.2f", cutInVoltage)) AC\(autoCutoffEnabled ? "1" : "0") AO\(alwaysOnChannels.map { $0 ? "1" : "0" }.joined()) PR\(priorityChannels.map { $0 ? "1" : "0" }.joined())"
+        applyFeatureDependencies()
+        
+        let configString = "CONFIG CO\(String(format: "%.2f", cutOutVoltage)) CI\(String(format: "%.2f", cutInVoltage)) AC\(autoCutoffEnabled ? "1" : "0") AO\(alwaysOnChannels.map { $0 ? "1" : "0" }.joined()) PR\(priorityChannels.map { $0 ? "1" : "0" }.joined()) FB\(advancedBatteryDetailsEnabled ? "1" : "0") BP\(activeBatteryProtocolCode()) FS\(isSolarAvailable ? "1" : "0") SP\(activeSolarProtocolCode())"
         
         if let data = configString.data(using: .utf8) {
             peripheral?.writeValue(data, for: characteristic, type: .withResponse)

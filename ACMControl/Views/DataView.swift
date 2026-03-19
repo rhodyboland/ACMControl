@@ -132,11 +132,14 @@ struct DataView: View {
     
     // The two main subsystems
     var subsystems: [Subsystem] {
-        [
-            bluetoothManager.batterySubsystem,
-            bluetoothManager.solarSubsystem,
-            bluetoothManager.sensorSubsystem
-        ]
+        var items: [Subsystem] = [bluetoothManager.batterySubsystem]
+        if bluetoothManager.isSolarAvailable {
+            items.append(bluetoothManager.solarSubsystem)
+        }
+        if bluetoothManager.sensorsEnabled {
+            items.append(bluetoothManager.sensorSubsystem)
+        }
+        return items
     }
     
     var body: some View {

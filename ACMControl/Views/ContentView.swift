@@ -56,6 +56,17 @@ struct ContentView: View {
                         }
                         .padding(.horizontal)
                         
+                        if let pairedSerialNumber = bluetoothManager.pairedSerialNumber {
+                            HStack {
+                                Text("Paired ACM")
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(pairedSerialNumber)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal)
+                        }
+                        
                         // Data View
                         DataView(bluetoothManager: bluetoothManager)
                         
@@ -199,12 +210,12 @@ struct LowCurrentControlView: View {
                                 // Optionally, send the state change to BluetoothManager here
                             }
                         ),
-                        brightness: Binding(
+                        brightness: bluetoothManager.ledBrightnessEnabled ? Binding(
                             get: { bluetoothManager.lowCurrentBrightness[index] },
                             set: { newValue in
                                 bluetoothManager.lowCurrentBrightness[index] = newValue
                             }
-                        ),
+                        ) : nil,
                         index: index,
                         isAlwaysOn: bluetoothManager.alwaysOnChannels[index],
                         action: {
@@ -285,9 +296,11 @@ struct MediumCurrentControlView: View {
             }
             .padding(.horizontal)
             // 2) Inverter Control, matching style
-            InverterControlView(bluetoothManager: bluetoothManager)
-                .padding(.horizontal)
-                .padding(.top, 10)
+            if bluetoothManager.inverterControlEnabled {
+                InverterControlView(bluetoothManager: bluetoothManager)
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+            }
         }
     }
 }

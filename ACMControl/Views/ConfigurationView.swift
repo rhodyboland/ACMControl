@@ -18,7 +18,6 @@ struct ConfigurationView: View {
     var body: some View {
         VStack {
             Form {
-                // ---- Existing Sections (Voltage Config, Channels, etc.) remain unchanged ----
                 Section(header: Text("Voltage Configuration")) {
                     HStack {
                         Text("Cut Out Voltage")
@@ -43,6 +42,159 @@ struct ConfigurationView: View {
                     }
                 }
                 
+                Section(header: Text("Installed Features")) {
+                    Toggle(
+                        "Advanced Battery Details",
+                        isOn: Binding(
+                            get: { bluetoothManager.advancedBatteryDetailsEnabled },
+                            set: { newValue in
+                                bluetoothManager.advancedBatteryDetailsEnabled = newValue
+                                bluetoothManager.applyFeatureDependencies()
+                            }
+                        )
+                    )
+                    
+                    if bluetoothManager.advancedBatteryDetailsEnabled {
+                        Picker(
+                            "Battery Protocol",
+                            selection: Binding(
+                                get: { bluetoothManager.batteryDetailsProtocol },
+                                set: { newValue in
+                                    bluetoothManager.batteryDetailsProtocol = newValue
+                                    bluetoothManager.applyFeatureDependencies()
+                                }
+                            )
+                        ) {
+                            ForEach(BatteryDetailsProtocol.allCases) { protocolOption in
+                                Text(protocolOption.displayName).tag(protocolOption)
+                            }
+                        }
+                    }
+                    
+                    Toggle(
+                        "Solar Charger",
+                        isOn: Binding(
+                            get: { bluetoothManager.solarChargerEnabled },
+                            set: { newValue in
+                                bluetoothManager.solarChargerEnabled = newValue
+                                bluetoothManager.applyFeatureDependencies()
+                            }
+                        )
+                    )
+                    .disabled(bluetoothManager.isVictronBMVSelected)
+                    
+                    if bluetoothManager.isVictronBMVSelected {
+                        Text("Victron BMV uses the ACM VE.Direct port, so solar charging is turned off automatically.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else if bluetoothManager.solarChargerEnabled {
+                        Picker("Solar Protocol", selection: $bluetoothManager.solarChargerProtocol) {
+                            ForEach(SolarChargerProtocol.allCases) { protocolOption in
+                                Text(protocolOption.displayName).tag(protocolOption)
+                            }
+                        }
+                    }
+                    
+                    Toggle("Sensors", isOn: $bluetoothManager.sensorsEnabled)
+                    if bluetoothManager.sensorsEnabled {
+                        Picker("Sensor Input 1", selection: $bluetoothManager.sensor1Type) {
+                            ForEach(SensorInputType.allCases) { sensorType in
+                                Text(sensorType.displayName).tag(sensorType)
+                            }
+                        }
+                        Picker("Sensor Input 2", selection: $bluetoothManager.sensor2Type) {
+                            ForEach(SensorInputType.allCases) { sensorType in
+                                Text(sensorType.displayName).tag(sensorType)
+                            }
+                        }
+                        Picker("External Switch 1", selection: $bluetoothManager.externalSwitch1Type) {
+                            ForEach(ExternalSwitchType.allCases) { switchType in
+                                Text(switchType.displayName).tag(switchType)
+                            }
+                        }
+                        Picker("External Switch 2", selection: $bluetoothManager.externalSwitch2Type) {
+                            ForEach(ExternalSwitchType.allCases) { switchType in
+                                Text(switchType.displayName).tag(switchType)
+                            }
+                        }
+                    }
+                    
+                    Toggle("Inverter Control", isOn: $bluetoothManager.inverterControlEnabled)
+                    if bluetoothManager.inverterControlEnabled {
+                        Picker("Inverter Mode", selection: $bluetoothManager.inverterControlMode) {
+                            ForEach(InverterControlMode.allCases) { controlMode in
+                                Text(controlMode.displayName).tag(controlMode)
+                            }
+                        }
+                    }
+                    
+                    Toggle("LED Dimming", isOn: $bluetoothManager.ledBrightnessEnabled)
+                    Text("This only affects low current channels. Medium current outputs do not support dimming.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                
+                Section(header: Text("ACM Pairing")) {
+                    HStack {
+                        Text("Paired ACM")
+                        Spacer()
+                        Text(bluetoothManager.pairedDeviceLabel)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    if let connectedSerialNumber = bluetoothManager.connectedSerialNumber {
+                        HStack {
+                            Text("Connected ACM")
+                            Spacer()
+                            Text(connectedSerialNumber)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Button(bluetoothManager.isScanningForPairing ? "Stop Scanning" : "Scan for ACMs") {
+                        if bluetoothManager.isScanningForPairing {
+                            bluetoothManager.stopPairingScan()
+                        } else {
+                            bluetoothManager.startPairingScan()
+                        }
+                    }
+                    
+                    if bluetoothManager.pairedSerialNumber != nil {
+                        Button("Clear Pairing", role: .destructive) {
+                            bluetoothManager.clearPairing()
+                        }
+                    }
+                    
+                    if bluetoothManager.isScanningForPairing && bluetoothManager.discoveredDevices.isEmpty {
+                        Text("Scanning for ACM devices...")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    ForEach(bluetoothManager.discoveredDevices) { device in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(device.serialNumber)
+                                Text("RSSI \(device.rssi)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            if bluetoothManager.pairedSerialNumber == device.serialNumber {
+                                Text("Paired")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            } else {
+                                Button("Pair") {
+                                    bluetoothManager.pair(with: device)
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 Section(header: Text("Channel Configuration")) {
                     ForEach(0..<10) { index in
                         HStack {
@@ -56,7 +208,6 @@ struct ConfigurationView: View {
                     }
                 }
                 
-                // ---- New Section for CarPlay configuration ----
                 Section(header: Text("CarPlay Configuration")) {
                     VStack(alignment: .leading) {
                         Text("CarPlay Data Points")
@@ -109,6 +260,10 @@ struct ConfigurationView: View {
             }
         }
         .navigationTitle("Configuration")
+        .onDisappear {
+            bluetoothManager.applyFeatureDependencies()
+            bluetoothManager.saveUserConfiguration()
+        }
     }
 }
 
@@ -117,12 +272,10 @@ struct CarPlayDataSelectionView: View {
     @ObservedObject var bluetoothManager: BluetoothManager
     @Environment(\.presentationMode) var presentationMode
     
-    var allKeys: [CarPlayDataKey] = CarPlayDataKey.allCases
-    
     var body: some View {
         NavigationView {
             List {
-                ForEach(allKeys, id: \.self) { key in
+                ForEach(bluetoothManager.availableCarPlayDataKeys, id: \.self) { key in
                     MultipleSelectionRow(
                         title: key.displayName,
                         isSelected: bluetoothManager.selectedCarPlayDataKeys.contains(key)
