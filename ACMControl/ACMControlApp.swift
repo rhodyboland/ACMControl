@@ -14,6 +14,7 @@ struct ACMControlApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .accessibilityIdentifier("acm-control-root-view")
         }
     }
 }
