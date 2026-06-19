@@ -5,6 +5,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <Preferences.h>
 
 #include "driver/twai.h"          // ESP-IDF TWAI driver (built-in)
 
@@ -32,6 +33,9 @@ bool featureBmsEnabled   = true;          // FB
 BatteryProtocol_t bmsProto = BP_NONE;     // BP: NONE / JK / BMV
 bool featureSolarEnabled = true;          // FS
 SolarProtocol_t   solarProto = SP_VIC;    // SP: NONE / VIC
+
+constexpr uint16_t CONFIG_VERSION = 1;
+const char* CONFIG_NAMESPACE = "acm_cfg";
 
 // Serial1 can be either Solar MPPT or BMV shunt depending on config
 enum Serial1Mode_t { SERIAL1_NONE, SERIAL1_SOLAR, SERIAL1_BMV };
@@ -471,6 +475,81 @@ float readQuadCurrent(int channel, int selectPin, int sensePin);
 float readDualCurrent(int channel);
 void applyConfiguration(const std::string &config);
 void startBLEAdvertising();
+void loadConfiguration();
+void saveConfiguration();
+
+uint16_t boolArrayToMask(const bool values[], int count) {
+  uint16_t mask = 0;
+  for (int i = 0; i < count; ++i) {
+    if (values[i]) {
+      mask |= (1 << i);
+    }
+  }
+  return mask;
+}
+
+void maskToBoolArray(uint16_t mask, bool values[], int count) {
+  for (int i = 0; i < count; ++i) {
+    values[i] = (mask & (1 << i)) != 0;
+  }
+}
+
+void loadConfiguration() {
+  Preferences prefs;
+  if (!prefs.begin(CONFIG_NAMESPACE, true)) {
+    Serial.println("Failed to open config storage for reading; using defaults.");
+    return;
+  }
+
+  uint16_t version = prefs.getUShort("version", 0);
+  if (version != CONFIG_VERSION) {
+    prefs.end();
+    Serial.println("No compatible saved config found; using defaults.");
+    return;
+  }
+
+  cutOutVoltage = prefs.getFloat("cut_out", cutOutVoltage);
+  cutInVoltage = prefs.getFloat("cut_in", cutInVoltage);
+  autoCutoffEnabled = prefs.getBool("auto_cut", autoCutoffEnabled);
+  maskToBoolArray(prefs.getUShort("always_on", boolArrayToMask(alwaysOnChannels, 10)), alwaysOnChannels, 10);
+  maskToBoolArray(prefs.getUShort("priority", boolArrayToMask(priorityChannels, 10)), priorityChannels, 10);
+  featureBmsEnabled = prefs.getBool("bms_en", featureBmsEnabled);
+  bmsProto = static_cast<BatteryProtocol_t>(prefs.getUChar("bms_proto", static_cast<uint8_t>(bmsProto)));
+  if (bmsProto != BP_NONE && bmsProto != BP_JK && bmsProto != BP_BMV) {
+    bmsProto = BP_NONE;
+  }
+  featureSolarEnabled = prefs.getBool("solar_en", featureSolarEnabled);
+  solarProto = static_cast<SolarProtocol_t>(prefs.getUChar("solar_proto", static_cast<uint8_t>(solarProto)));
+  if (solarProto != SP_NONE && solarProto != SP_VIC) {
+    solarProto = SP_NONE;
+  }
+  prefs.end();
+
+  reconfigureSerial1Mode();
+  Serial.println("Loaded config from flash.");
+}
+
+void saveConfiguration() {
+  Preferences prefs;
+  if (!prefs.begin(CONFIG_NAMESPACE, false)) {
+    Serial.println("Failed to open config storage for writing.");
+    return;
+  }
+
+  prefs.putUShort("version", CONFIG_VERSION);
+  prefs.putFloat("cut_out", cutOutVoltage);
+  prefs.putFloat("cut_in", cutInVoltage);
+  prefs.putBool("auto_cut", autoCutoffEnabled);
+  prefs.putUShort("always_on", boolArrayToMask(alwaysOnChannels, 10));
+  prefs.putUShort("priority", boolArrayToMask(priorityChannels, 10));
+  prefs.putBool("bms_en", featureBmsEnabled);
+  prefs.putUChar("bms_proto", static_cast<uint8_t>(bmsProto));
+  prefs.putBool("solar_en", featureSolarEnabled);
+  prefs.putUChar("solar_proto", static_cast<uint8_t>(solarProto));
+  prefs.end();
+
+  Serial.println("Saved config to flash.");
+}
 
 // ----------------------------------------------------------------------
 // BLE Setup
@@ -563,8 +642,8 @@ class CharacteristicCallbacks : public BLECharacteristicCallbacks {
  */
 void updateChannels() {
     // Decide logic thresholds:
-    bool batteryIsCritical = (batteryVoltage < critVoltage);
-    bool batteryIsLow      = (batteryVoltage < cutOutVoltage);
+    bool batteryIsCritical = autoCutoffEnabled && (batteryVoltage < critVoltage);
+    bool batteryIsLow      = autoCutoffEnabled && (batteryVoltage < cutOutVoltage);
 
     // ----- LOW CURRENT CHANNELS (8 channels) -----
     for (int i = 0; i < 8; i++) {
@@ -978,6 +1057,8 @@ void startBLEAdvertising() {
 // ----------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
+    loadConfiguration();
+
     Serial1.begin(19200, SERIAL_8N1, 9, 8);
     Serial.println("Serial1 (Victron) initialized at 19200 baud");
 
@@ -1185,12 +1266,16 @@ void checkBatteryVoltage() {
         }
     }
 
-    if (batteryVoltage < critVoltage) {
+    if (!autoCutoffEnabled && outputsDisabled) {
+        outputsDisabled = false;
+    }
+
+    if (autoCutoffEnabled && batteryVoltage < critVoltage) {
         handleAutoShutdownWarning();
-    } else if (batteryVoltage < cutOutVoltage + 0.2) {
-        flashLED('Y', 3, 500);
-    } else if (batteryVoltage < cutOutVoltage && !outputsDisabled) {
+    } else if (autoCutoffEnabled && batteryVoltage < cutOutVoltage && !outputsDisabled) {
         disableOutputs();
+    } else if (autoCutoffEnabled && batteryVoltage < cutOutVoltage + 0.2) {
+        flashLED('Y', 3, 500);
     } else if (batteryVoltage >= cutInVoltage && outputsDisabled) {
         outputsDisabled = false;
         setLEDColor('G');
@@ -1478,8 +1563,12 @@ void applyConfiguration(const std::string &config) {
         pos += 2;
         next_pos = config.find(" ", pos);
         std::string aoString = config.substr(pos, next_pos - pos);
-        for (int i = 0; i < 10; ++i) {
-            alwaysOnChannels[i] = aoString[i] == '1';
+        if (aoString.length() >= 10) {
+            for (int i = 0; i < 10; ++i) {
+                alwaysOnChannels[i] = aoString[i] == '1';
+            }
+        } else {
+            Serial.println("Invalid Always-On channel mask; keeping previous values.");
         }
     }
     
@@ -1488,8 +1577,12 @@ void applyConfiguration(const std::string &config) {
         pos += 2;
         next_pos = config.find(" ", pos);
         std::string prString = config.substr(pos, next_pos - pos);
-        for (int i = 0; i < 10; ++i) {
-            priorityChannels[i] = prString[i] == '1';
+        if (prString.length() >= 10) {
+            for (int i = 0; i < 10; ++i) {
+                priorityChannels[i] = prString[i] == '1';
+            }
+        } else {
+            Serial.println("Invalid Priority channel mask; keeping previous values.");
         }
         Serial.print("Priority Channels: ");
         for (int i = 0; i < 10; ++i) {
@@ -1543,5 +1636,6 @@ void applyConfiguration(const std::string &config) {
 
     // Apply cross-coupling rule (BMV uses VE.Direct, so Solar must be off)
     reconfigureSerial1Mode();
+    saveConfiguration();
 
 }
