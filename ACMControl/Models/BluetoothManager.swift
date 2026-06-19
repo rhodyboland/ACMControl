@@ -784,8 +784,8 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         // Battery Voltage
                         self.batteryVoltage = Float(strtoul(String(values[0]), nil, 16)) / 100.0
                         
-                        // Current Usage BMS
-                        self.currentUsage = Float(strtoul(String(values[1]), nil, 16)) / 100000.0
+                        // JK BMS current is encoded by firmware as (amps + 512) * 10.
+                        self.currentUsage = (Float(strtoul(String(values[1]), nil, 16)) / 10.0) - 512.0
                         
                         // Current Usage Output
                         self.currentUsageOut = Float(strtoul(String(values[2]), nil, 16)) / 100000.0
