@@ -788,7 +788,8 @@ static void sendTelemetry10Hz()     // 0x100   (runs every 100 ms)
     uint16_t rawBV = (uint16_t)(batteryVoltage * 100);   // 0.01 V
     // new unsigned encoding with +512 A bias
     // scale = 0.01 A → offsetRaw = 512 A ÷ 0.01 A = 51200 units
-    int32_t tmpBI = (int32_t)roundf(totalCurrent * 100.0f) + 51200;
+    float batteryCurrentForTelemetry = bmsConnected ? bmsCurrent : totalCurrent;
+    int32_t tmpBI = (int32_t)roundf(batteryCurrentForTelemetry * 100.0f) + 51200;
     uint16_t rawBIoff = (uint16_t)tmpBI;             // wrap if out of range
 
 
@@ -1215,11 +1216,8 @@ void sendSensorData() {
     // Voltage & Current:
     String batteryVoltageHex = floatToHex(batteryVoltage, 100);
     String cellAvgHex = floatToHex(avgCellVoltage, 100);
-    // totalCurrent is from readQuadCurrent & readDualCurrent sums
-    // bmsCurrent is A*10 ie -4 A -> 40.00
+    // bmsCurrent is encoded with a +512 A offset so negative values can cross BLE as hex.
     String currentUsageBMSHex = floatToHex(bmsCurrent + 512, 10);
-    // Serial.println(bmsCurrent);
-    String currentUsageHex = floatToHex(totalCurrent, 100);
     // Solar from your code:
     String solarVoltageHex = floatToHex(VPV, 100);
     String solarCurrentHex = floatToHex(I, 100);
@@ -1242,12 +1240,7 @@ void sendSensorData() {
     String bmsFlag        = bmsConnected ? "1" : "0";  // true if JK good OR BMV good
 
 
-    // Combine in the voltageCurrentSection
-    // We'll add bmsFlag at the end
-    String voltageCurrentSection = "V:" + batteryVoltageHex + "," + currentUsageBMSHex + "," + currentUsageHex + "," 
-                                     + solarVoltageHex + "," + solarCurrentHex + "," 
-                                     + solarPowerHex + "," + solarStateHex + "," + cellAvgHex  + "," + batTemp1Hex + "," + batSocHex + "," + sensor1Hex + "," 
-                                     + connectionFlag + "," + bmsFlag + ";" ;
+    totalCurrent = 0.0f;
 
     // Low current channels
     String loadChannelsSection = "L:";
@@ -1268,6 +1261,14 @@ void sendSensorData() {
         String currentHex = floatToHex(current, 1000);
         mediumChannelsSection += stateHex + currentHex + ((i < 1) ? "," : ";");
     }
+
+    float outputCurrentForTelemetry = bmsConnected ? 0.0f : totalCurrent;
+    String currentUsageHex = floatToHex(outputCurrentForTelemetry, 100);
+
+    String voltageCurrentSection = "V:" + batteryVoltageHex + "," + currentUsageBMSHex + "," + currentUsageHex + "," 
+                                     + solarVoltageHex + "," + solarCurrentHex + "," 
+                                     + solarPowerHex + "," + solarStateHex + "," + cellAvgHex  + "," + batTemp1Hex + "," + batSocHex + "," + sensor1Hex + "," 
+                                     + connectionFlag + "," + bmsFlag + ";" ;
 
     
     // Add an inverter section to the data packet, e.g. "I:0FA6;"

@@ -784,11 +784,13 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         // Battery Voltage
                         self.batteryVoltage = Float(strtoul(String(values[0]), nil, 16)) / 100.0
                         
-                        // JK BMS current is encoded by firmware as (amps + 512) * 10.
-                        self.currentUsage = (Float(strtoul(String(values[1]), nil, 16)) / 10.0) - 512.0
+                        let decodedBmsCurrent = (Float(strtoul(String(values[1]), nil, 16)) / 10.0) - 512.0
                         
-                        // Current Usage Output
-                        self.currentUsageOut = Float(strtoul(String(values[2]), nil, 16)) / 100000.0
+                        // High-side driver output current is encoded as amps * 100.
+                        let decodedOutputCurrent = Float(strtoul(String(values[2]), nil, 16)) / 100.0
+                        let bmsIsConnected = (values[12] == "1")
+                        self.currentUsageOut = decodedOutputCurrent
+                        self.currentUsage = bmsIsConnected ? decodedBmsCurrent : decodedOutputCurrent
                         
                         // Solar Voltage
                         self.solarVoltage = Float(strtoul(String(values[3]), nil, 16)) / 100000.0
@@ -814,7 +816,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         // Serial Connection State Victron
                         self.serialState = (values[11] == "1")
                         // Serial Connection State Victron
-                        self.serialState2 = (values[12] == "1")
+                        self.serialState2 = bmsIsConnected
                         
                         // Debug prints
 //                        print("Battery Voltage Updated: \(self.batteryVoltage) V")
