@@ -146,6 +146,7 @@ Adafruit_MCP23X17 mcp;
 #define ACM_SERIAL_NUMBER   "ACM-0001"
 
 BLECharacteristic *pCharacteristic;
+String bleDeviceName;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
@@ -469,6 +470,7 @@ int getMediumCurrentPin(int index);
 float readQuadCurrent(int channel, int selectPin, int sensePin);
 float readDualCurrent(int channel);
 void applyConfiguration(const std::string &config);
+void startBLEAdvertising();
 
 // ----------------------------------------------------------------------
 // BLE Setup
@@ -480,7 +482,7 @@ class MyCallbacks : public BLEServerCallbacks {
     }
     void onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
-        BLEDevice::startAdvertising();
+        startBLEAdvertising();
         flashLED('R', 1, 250); // Device disconnected
     }
 };
@@ -949,6 +951,26 @@ bool initCAN()
     return true;
 }
 
+void startBLEAdvertising() {
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    BLEAdvertisementData advertisementData;
+    BLEAdvertisementData scanResponseData;
+
+    advertisementData.setName(bleDeviceName.c_str());
+    scanResponseData.setName(bleDeviceName.c_str());
+
+    pAdvertising->stop();
+    pAdvertising->setAdvertisementData(advertisementData);
+    pAdvertising->setScanResponseData(scanResponseData);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMaxPreferred(0x12);
+    BLEDevice::startAdvertising();
+
+    Serial.print("BLE advertising as: ");
+    Serial.println(bleDeviceName);
+}
+
 
 // ----------------------------------------------------------------------
 // Setup
@@ -1004,7 +1026,7 @@ void setup() {
     initCAN();
 
     // BLE init
-    String bleDeviceName = "ESP32_ACM_" + String(ACM_SERIAL_NUMBER);
+    bleDeviceName = "ESP32_ACM_" + String(ACM_SERIAL_NUMBER);
     BLEDevice::init(bleDeviceName.c_str());
     BLEServer *pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MyCallbacks());
@@ -1023,9 +1045,10 @@ void setup() {
     pCharacteristic->setValue(initialValue.c_str());
     pService->start();
 
-    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    BLEDevice::startAdvertising();
+    BLEDevice::setMTU(185);
+    BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID);
+    reconfigureSerial1Mode();
+    startBLEAdvertising();
 
     // Initialize voltage/current buffers
     for (int i = 0; i < voltageBufferSize; i++) {
