@@ -243,6 +243,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var priorityChannels: [Bool] = Array(repeating: false, count: 10)
     @Published var advancedBatteryDetailsEnabled: Bool = false
     @Published var batteryDetailsProtocol: BatteryDetailsProtocol = .jkBms
+    @Published var batteryCapacityAh: Float = 100.0
     @Published var solarChargerEnabled: Bool = false
     @Published var solarChargerProtocol: SolarChargerProtocol = .victron
     @Published var sensorsEnabled: Bool = false
@@ -269,6 +270,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     
     // Flag to control switch updates (once on connection)
     private var shouldUpdateSwitches: Bool = false
+    private var batteryCurrentSamples: [(timestamp: Date, current: Float)] = []
     
     // MARK: - CarPlay Data Selection
     /// Which data items the user wants to see on CarPlay. Defaults to 4 items.
@@ -378,6 +380,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         let priorityChannels: [Bool]
         let advancedBatteryDetailsEnabled: Bool?
         let batteryDetailsProtocol: BatteryDetailsProtocol?
+        let batteryCapacityAh: Float?
         let solarChargerEnabled: Bool?
         let solarChargerProtocol: SolarChargerProtocol?
         let sensorsEnabled: Bool?
@@ -403,6 +406,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         self.priorityChannels  = decoded.priorityChannels
         self.advancedBatteryDetailsEnabled = decoded.advancedBatteryDetailsEnabled ?? false
         self.batteryDetailsProtocol = decoded.batteryDetailsProtocol ?? .jkBms
+        self.batteryCapacityAh = decoded.batteryCapacityAh ?? 100.0
         self.solarChargerEnabled = decoded.solarChargerEnabled ?? false
         self.solarChargerProtocol = decoded.solarChargerProtocol ?? .victron
         self.sensorsEnabled = decoded.sensorsEnabled ?? false
@@ -427,6 +431,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             priorityChannels: self.priorityChannels,
             advancedBatteryDetailsEnabled: self.advancedBatteryDetailsEnabled,
             batteryDetailsProtocol: self.batteryDetailsProtocol,
+            batteryCapacityAh: self.batteryCapacityAh,
             solarChargerEnabled: self.solarChargerEnabled,
             solarChargerProtocol: self.solarChargerProtocol,
             sensorsEnabled: self.sensorsEnabled,
@@ -493,6 +498,12 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             bmvTimeToGoMinutes = 0
         }
         
+        if !advancedBatteryDetailsEnabled || batteryDetailsProtocol != .jkBms {
+            batteryCurrentSamples.removeAll()
+        }
+        
+        batteryCapacityAh = max(1.0, batteryCapacityAh)
+        
         sanitizeCarPlaySelections()
     }
     
@@ -523,6 +534,42 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             return "\(minutes) min"
         }
         return "\(hours)h \(minutes)m"
+    }
+    
+    private func recordBatteryCurrentSample(_ current: Float) {
+        let now = Date()
+        batteryCurrentSamples.append((timestamp: now, current: current))
+        batteryCurrentSamples.removeAll { now.timeIntervalSince($0.timestamp) > 60 }
+    }
+    
+    private func formattedJKTimeRemaining() -> String {
+        guard serialState2 else { return "Unavailable" }
+        guard batteryCapacityAh > 0 else { return "Set capacity" }
+        let dischargeSamples = batteryCurrentSamples
+            .map { $0.current }
+            .filter { $0 < -0.1 }
+        
+        guard !dischargeSamples.isEmpty else {
+            return currentUsage > 0.1 ? "Charging" : "Unavailable"
+        }
+        
+        let averageDischargeCurrent = abs(dischargeSamples.reduce(0, +) / Float(dischargeSamples.count))
+        guard averageDischargeCurrent > 0.1 else { return "Unavailable" }
+        
+        let clampedPercentage = max(Float(0), min(batteryPercentage, Float(100)))
+        let remainingAh = batteryCapacityAh * clampedPercentage / 100.0
+        let minutesRemaining = Int((remainingAh / averageDischargeCurrent * 60).rounded())
+        return formattedDuration(minutes: minutesRemaining)
+    }
+    
+    private func formattedDuration(minutes: Int) -> String {
+        guard minutes > 0 else { return "Unavailable" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        if hours == 0 {
+            return "\(remainingMinutes) min"
+        }
+        return "\(hours)h \(remainingMinutes)m"
     }
     
     var pairedDeviceLabel: String {
@@ -791,6 +838,9 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         let bmsIsConnected = (values[12] == "1")
                         self.currentUsageOut = decodedOutputCurrent
                         self.currentUsage = bmsIsConnected ? decodedBmsCurrent : decodedOutputCurrent
+                        if self.advancedBatteryDetailsEnabled && self.batteryDetailsProtocol == .jkBms && bmsIsConnected {
+                            self.recordBatteryCurrentSample(decodedBmsCurrent)
+                        }
                         
                         // Solar Voltage
                         self.solarVoltage = Float(strtoul(String(values[3]), nil, 16)) / 100000.0
@@ -1045,6 +1095,14 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     DataItem(
                         title: "Battery Avg Cell",
                         value: String(format: "%.2f V", batteryCellVoltage),
+                        state: "Normal",
+                        isDisabled: !serialState2
+                    )
+                )
+                batteryItems.append(
+                    DataItem(
+                        title: "Time Remaining",
+                        value: formattedJKTimeRemaining(),
                         state: "Normal",
                         isDisabled: !serialState2
                     )

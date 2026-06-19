@@ -69,6 +69,20 @@ struct ConfigurationView: View {
                                 Text(protocolOption.displayName).tag(protocolOption)
                             }
                         }
+                        
+                        if bluetoothManager.batteryDetailsProtocol == .jkBms {
+                            HStack {
+                                Text("Battery Capacity")
+                                Spacer()
+                                TextField("100", value: $bluetoothManager.batteryCapacityAh, format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .frame(maxWidth: 90)
+                                Text("Ah")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
                     
                     Toggle(
