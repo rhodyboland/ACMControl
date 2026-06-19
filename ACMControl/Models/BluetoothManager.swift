@@ -529,22 +529,29 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         pairedSerialNumber ?? "No ACM Paired"
     }
     
-    private func serialNumber(from peripheralName: String?) -> String? {
-        guard let peripheralName else { return nil }
-        guard peripheralName.hasPrefix(Self.deviceNamePrefix) else { return nil }
-        let serial = String(peripheralName.dropFirst(Self.deviceNamePrefix.count))
+    private func serialNumber(fromDeviceName deviceName: String?) -> String? {
+        guard let deviceName else { return nil }
+        guard deviceName.hasPrefix(Self.deviceNamePrefix) else { return nil }
+        let serial = String(deviceName.dropFirst(Self.deviceNamePrefix.count))
         return serial.isEmpty ? nil : serial
     }
     
-    private func updateDiscoveredDevice(_ peripheral: CBPeripheral, rssi: NSNumber) {
-        guard let serialNumber = serialNumber(from: peripheral.name) else { return }
+    private func advertisedName(for peripheral: CBPeripheral, advertisementData: [String: Any]) -> String? {
+        if let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String {
+            return localName
+        }
+        return peripheral.name
+    }
+    
+    private func updateDiscoveredDevice(_ peripheral: CBPeripheral, advertisedName: String?, rssi: NSNumber) {
+        guard let serialNumber = serialNumber(fromDeviceName: advertisedName) else { return }
         
         discoveredPeripheralsBySerial[serialNumber] = peripheral
         
         let device = ACMDiscoveredDevice(
             id: peripheral.identifier,
             serialNumber: serialNumber,
-            displayName: peripheral.name ?? serialNumber,
+            displayName: advertisedName ?? serialNumber,
             rssi: rssi.intValue
         )
         
@@ -556,16 +563,17 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
     }
     
-    private func startScanning() {
+    private func startScanning(includeAllDevices: Bool = false) {
         guard centralManager.state == .poweredOn else { return }
-        centralManager.scanForPeripherals(withServices: [Self.serviceUUID], options: nil)
+        let serviceFilter: [CBUUID]? = includeAllDevices ? nil : [Self.serviceUUID]
+        centralManager.scanForPeripherals(withServices: serviceFilter, options: nil)
     }
     
     func startPairingScan() {
         discoveredDevices = []
         discoveredPeripheralsBySerial = [:]
         isScanningForPairing = true
-        startScanning()
+        startScanning(includeAllDevices: true)
     }
     
     func stopPairingScan() {
@@ -598,19 +606,20 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
     }
     
-    private func shouldAutoConnect(to peripheral: CBPeripheral) -> Bool {
+    private func shouldAutoConnect(to peripheral: CBPeripheral, advertisedName: String? = nil) -> Bool {
+        let deviceName = advertisedName ?? peripheral.name
         if let pairedSerialNumber {
-            return serialNumber(from: peripheral.name) == pairedSerialNumber
+            return serialNumber(fromDeviceName: deviceName) == pairedSerialNumber
         }
         
-        return peripheral.name == Self.legacyDeviceName
+        return deviceName == Self.legacyDeviceName
     }
     
     // MARK: - Connection Status Checker
     private func checkConnectionStatus() {
         guard let peripheral = peripheral else {
             isConnected = false
-            startScanning()
+            startScanning(includeAllDevices: pairedSerialNumber != nil)
             print("Peripheral not found. Scanning for peripherals...")
             return
         }
@@ -619,13 +628,13 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         let connectedPeripherals = centralManager.retrieveConnectedPeripherals(withServices: [Self.serviceUUID])
         if connectedPeripherals.contains(peripheral) {
             isConnected = true
-            connectedSerialNumber = serialNumber(from: peripheral.name)
+            connectedSerialNumber = serialNumber(fromDeviceName: peripheral.name) ?? pairedSerialNumber
             peripheral.delegate = self
             peripheral.discoverServices([Self.serviceUUID])
             print("Peripheral is already connected.")
         } else {
             isConnected = false
-            startScanning()
+            startScanning(includeAllDevices: pairedSerialNumber != nil)
             print("Peripheral not connected. Scanning for peripherals...")
         }
     }
@@ -641,11 +650,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     centralManager.connect(peripheral, options: nil)
                     print("Reconnecting to peripheral: \(peripheral.name ?? "Unknown")")
                 } else {
-                    startScanning()
+                    startScanning(includeAllDevices: pairedSerialNumber != nil)
                     print("Scanning for peripherals...")
                 }
             } else {
-                startScanning()
+                startScanning(includeAllDevices: pairedSerialNumber != nil)
                 print("Scanning for peripherals...")
             }
         default:
@@ -656,14 +665,15 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String : Any], rssi RSSI: NSNumber) {
-        print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
-        updateDiscoveredDevice(peripheral, rssi: RSSI)
+        let deviceName = advertisedName(for: peripheral, advertisementData: advertisementData)
+        print("Discovered peripheral: \(deviceName ?? "Unknown")")
+        updateDiscoveredDevice(peripheral, advertisedName: deviceName, rssi: RSSI)
         
-        if shouldAutoConnect(to: peripheral) {
+        if shouldAutoConnect(to: peripheral, advertisedName: deviceName) {
             self.peripheral = peripheral
             centralManager.stopScan()
             centralManager.connect(peripheral, options: nil)
-            print("Connecting to \(peripheral.name ?? "Unknown")...")
+            print("Connecting to \(deviceName ?? "Unknown")...")
         }
     }
     
@@ -671,7 +681,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("Connected to peripheral: \(peripheral.name ?? "Unknown")")
         DispatchQueue.main.async {
             self.isConnected = true
-            self.connectedSerialNumber = self.serialNumber(from: peripheral.name)
+            self.connectedSerialNumber = self.serialNumber(fromDeviceName: peripheral.name) ?? self.pairedSerialNumber
             self.shouldUpdateSwitches = true // Enable switch updates on (re)connection
         }
         peripheral.delegate = self
@@ -703,7 +713,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             if self.shouldAutoConnect(to: peripheral) {
                 self.centralManager.connect(peripheral, options: nil)
             } else {
-                self.startScanning()
+                self.startScanning(includeAllDevices: self.pairedSerialNumber != nil)
             }
         }
     }

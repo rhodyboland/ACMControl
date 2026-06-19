@@ -956,7 +956,7 @@ void startBLEAdvertising() {
     BLEAdvertisementData advertisementData;
     BLEAdvertisementData scanResponseData;
 
-    advertisementData.setName(bleDeviceName.c_str());
+    advertisementData.setCompleteServices(BLEUUID(SERVICE_UUID));
     scanResponseData.setName(bleDeviceName.c_str());
 
     pAdvertising->stop();
@@ -1041,12 +1041,12 @@ void setup() {
                       );
 
     pCharacteristic->setCallbacks(new CharacteristicCallbacks());
+    pCharacteristic->addDescriptor(new BLE2902());
     String initialValue = "SN:" + String(ACM_SERIAL_NUMBER);
     pCharacteristic->setValue(initialValue.c_str());
     pService->start();
 
     BLEDevice::setMTU(185);
-    BLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID);
     reconfigureSerial1Mode();
     startBLEAdvertising();
 
