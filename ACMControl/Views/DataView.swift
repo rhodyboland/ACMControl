@@ -48,22 +48,24 @@ struct BatteryPercentageCard: View {
         VStack {
             // GeometryReader for the semi-circle & text overlay
             GeometryReader { geometry in
+                let lineWidth: CGFloat = 18
                 let size = min(geometry.size.width, geometry.size.height * 2)
+                let clampedProgress = min(max(animatedPercentage / 100, 0), 1)
                 ZStack {
                     // Background semi-circle
                     SemiCircle()
-                        .stroke(Color.gray.opacity(0.3), style: StrokeStyle(lineWidth: 20, lineCap: .round))
-                    
+                        .stroke(Color.gray.opacity(0.3), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                     
                     // Gradient foreground arc
-                    AngularGradient(
-                        gradient: Gradient(colors: [Color.red, Color.yellow, Color.green]),
-                        center: .center,
-                        startAngle: .degrees(170),
-                        endAngle: .degrees(370)
-                    )
-                    .mask(
-                        SemiCircle(progress: animatedPercentage / 100)
-                            .stroke(style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                    SemiCircle(progress: clampedProgress)
+                        .stroke(
+                            AngularGradient(
+                                gradient: Gradient(colors: [Color.red, Color.yellow, Color.green]),
+                                center: .center,
+                                startAngle: .degrees(180),
+                                endAngle: .degrees(360)
+                            ),
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
                     .animation(.easeOut(duration: 1.0), value: animatedPercentage)
                     
@@ -76,7 +78,7 @@ struct BatteryPercentageCard: View {
                         .accessibilityLabel("\(percentage) percent battery")
                 }
                 .frame(width: size, height: size / 2)
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2.5)
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             }
             .frame(height: 120) // Visual size for the semi-circle
             
@@ -106,11 +108,13 @@ struct SemiCircle: Shape {
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        // Arc from 170 degrees to (170 + 200*progress) degrees
-        let startAngle = Angle(degrees: 170)
-        let endAngle   = Angle(degrees: 170 + (200.0 * progress))
-        path.addArc(center: CGPoint(x: rect.midX, y: rect.maxY),
-                    radius: rect.width / 2,
+        let insetRect = rect.insetBy(dx: 10, dy: 10)
+        let radius = min(insetRect.width / 2, insetRect.height)
+        // Arc from 180 degrees to (180 + 180*progress) degrees
+        let startAngle = Angle(degrees: 180)
+        let endAngle   = Angle(degrees: 180 + (180.0 * progress))
+        path.addArc(center: CGPoint(x: insetRect.midX, y: insetRect.maxY),
+                    radius: radius,
                     startAngle: startAngle,
                     endAngle: endAngle,
                     clockwise: false)

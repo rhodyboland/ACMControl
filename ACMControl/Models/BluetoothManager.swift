@@ -542,24 +542,27 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         batteryCurrentSamples.removeAll { now.timeIntervalSince($0.timestamp) > 60 }
     }
     
-    private func formattedJKTimeRemaining() -> String {
-        guard serialState2 else { return "Unavailable" }
-        guard batteryCapacityAh > 0 else { return "Set capacity" }
-        let dischargeSamples = batteryCurrentSamples
+    private func jkTimeEstimate() -> (title: String, value: String) {
+        let isCharging = currentUsage > 0.1
+        let title = isCharging ? "Time To Full" : "Time Remaining"
+        guard serialState2 else { return (title, "Unavailable") }
+        guard batteryCapacityAh > 0 else { return (title, "Set capacity") }
+        
+        let relevantSamples = batteryCurrentSamples
             .map { $0.current }
-            .filter { $0 < -0.1 }
+            .filter { isCharging ? $0 > 0.1 : $0 < -0.1 }
         
-        guard !dischargeSamples.isEmpty else {
-            return currentUsage > 0.1 ? "Charging" : "Unavailable"
-        }
+        guard !relevantSamples.isEmpty else { return (title, "Unavailable") }
         
-        let averageDischargeCurrent = abs(dischargeSamples.reduce(0, +) / Float(dischargeSamples.count))
-        guard averageDischargeCurrent > 0.1 else { return "Unavailable" }
+        let averageCurrent = abs(relevantSamples.reduce(0, +) / Float(relevantSamples.count))
+        guard averageCurrent > 0.1 else { return (title, "Unavailable") }
         
         let clampedPercentage = max(Float(0), min(batteryPercentage, Float(100)))
-        let remainingAh = batteryCapacityAh * clampedPercentage / 100.0
-        let minutesRemaining = Int((remainingAh / averageDischargeCurrent * 60).rounded())
-        return formattedDuration(minutes: minutesRemaining)
+        let targetAh = isCharging
+            ? batteryCapacityAh * (100.0 - clampedPercentage) / 100.0
+            : batteryCapacityAh * clampedPercentage / 100.0
+        let minutes = Int((targetAh / averageCurrent * 60).rounded())
+        return (title, formattedDuration(minutes: minutes))
     }
     
     private func formattedDuration(minutes: Int) -> String {
@@ -1099,10 +1102,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                         isDisabled: !serialState2
                     )
                 )
+                let timeEstimate = jkTimeEstimate()
                 batteryItems.append(
                     DataItem(
-                        title: "Time Remaining",
-                        value: formattedJKTimeRemaining(),
+                        title: timeEstimate.title,
+                        value: timeEstimate.value,
                         state: "Normal",
                         isDisabled: !serialState2
                     )
