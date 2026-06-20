@@ -137,6 +137,8 @@ enum InverterControlMode: String, CaseIterable, Codable, Identifiable {
 class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private static let serviceUUID = CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")
     private static let characteristicUUID = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
+    private static let otaServiceUUID = CBUUID(string: "8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0001")
+    private static let otaCharacteristicUUID = CBUUID(string: "8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0002")
     private static let deviceNamePrefix = "ESP32_ACM_"
     private static let legacyDeviceName = "ESP32_ACM"
     
@@ -144,6 +146,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristic: CBCharacteristic?
+    private var otaCharacteristic: CBCharacteristic?
     private var discoveredPeripheralsBySerial: [String: CBPeripheral] = [:]
     
     static let shared = BluetoothManager()
@@ -267,6 +270,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var connectedSerialNumber: String? = nil
     @Published var discoveredDevices: [ACMDiscoveredDevice] = []
     @Published var isScanningForPairing: Bool = false
+    @Published var connectedFirmwareVersion: String? = nil
+    @Published var connectedHardwareRevision: String? = nil
+    @Published var connectedOTACapable: Bool = false
+    @Published var otaServiceAvailable: Bool = false
+    @Published var otaStatus: String? = nil
     
     // Flag to control switch updates (once on connection)
     private var shouldUpdateSwitches: Bool = false
@@ -643,6 +651,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         guard let targetPeripheral = discoveredPeripheralsBySerial[device.serialNumber] else { return }
         peripheral = targetPeripheral
         characteristic = nil
+        otaCharacteristic = nil
         connectedSerialNumber = device.serialNumber
         centralManager.connect(targetPeripheral, options: nil)
     }
@@ -650,6 +659,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     func clearPairing() {
         pairedSerialNumber = nil
         connectedSerialNumber = nil
+        connectedFirmwareVersion = nil
+        connectedHardwareRevision = nil
+        connectedOTACapable = false
+        otaServiceAvailable = false
+        otaStatus = nil
         saveUserConfiguration()
         if let currentPeripheral = peripheral {
             centralManager.cancelPeripheralConnection(currentPeripheral)
@@ -680,7 +694,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             isConnected = true
             connectedSerialNumber = serialNumber(fromDeviceName: peripheral.name) ?? pairedSerialNumber
             peripheral.delegate = self
-            peripheral.discoverServices([Self.serviceUUID])
+            peripheral.discoverServices([Self.serviceUUID, Self.otaServiceUUID])
             print("Peripheral is already connected.")
         } else {
             isConnected = false
@@ -735,7 +749,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             self.shouldUpdateSwitches = true // Enable switch updates on (re)connection
         }
         peripheral.delegate = self
-        peripheral.discoverServices([Self.serviceUUID])
+        peripheral.discoverServices([Self.serviceUUID, Self.otaServiceUUID])
     }
     
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -751,6 +765,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         DispatchQueue.main.async {
             self.isConnected = false
             self.connectedSerialNumber = nil
+            self.connectedFirmwareVersion = nil
+            self.connectedHardwareRevision = nil
+            self.connectedOTACapable = false
+            self.otaServiceAvailable = false
+            self.otaStatus = nil
         }
         attemptReconnection()
     }
@@ -777,7 +796,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         if let services = peripheral.services {
             for service in services {
                 print("Discovered service: \(service.uuid)")
-                peripheral.discoverCharacteristics([Self.characteristicUUID], for: service)
+                if service.uuid == Self.serviceUUID {
+                    peripheral.discoverCharacteristics([Self.characteristicUUID], for: service)
+                } else if service.uuid == Self.otaServiceUUID {
+                    peripheral.discoverCharacteristics([Self.otaCharacteristicUUID], for: service)
+                }
             }
         }
     }
@@ -789,10 +812,16 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
         if let characteristics = service.characteristics {
             for characteristic in characteristics {
-                if characteristic.uuid == Self.characteristicUUID {
+                if service.uuid == Self.serviceUUID && characteristic.uuid == Self.characteristicUUID {
                     self.characteristic = characteristic
                     peripheral.setNotifyValue(true, for: characteristic)
                     print("Found characteristic: \(characteristic.uuid). Enabled notifications.")
+                } else if service.uuid == Self.otaServiceUUID && characteristic.uuid == Self.otaCharacteristicUUID {
+                    self.otaCharacteristic = characteristic
+                    self.otaServiceAvailable = true
+                    peripheral.setNotifyValue(true, for: characteristic)
+                    requestOTAStatus()
+                    print("Found OTA characteristic: \(characteristic.uuid). Enabled notifications.")
                 }
             }
         }
@@ -806,7 +835,11 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         if let value = characteristic.value {
             let receivedString = String(decoding: value, as: UTF8.self)
 //            print("Received data: \(receivedString)")
-            parseReceivedData(receivedString)
+            if characteristic.uuid == Self.otaCharacteristicUUID {
+                otaStatus = receivedString
+            } else {
+                parseReceivedData(receivedString)
+            }
         }
     }
     
@@ -985,6 +1018,18 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     }
                 case "SN":
                     self.connectedSerialNumber = String(content)
+                case "FW":
+                    let values = content.split(separator: ",", omittingEmptySubsequences: false)
+                    if values.count >= 3 {
+                        self.connectedFirmwareVersion = String(values[0])
+                        self.connectedHardwareRevision = String(values[1])
+                        self.connectedOTACapable = values[2] == "1"
+                        if values.count >= 4 {
+                            self.connectedSerialNumber = String(values[3])
+                        }
+                    } else {
+                        print("Invalid firmware metadata: \(content)")
+                    }
                 default:
                     print("Unknown data component: \(section)")
                 }
@@ -1251,6 +1296,16 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         }
         peripheral?.writeValue(data, for: characteristic, type: .withResponse)
         print("Sent command: \(command)")
+    }
+    
+    func requestOTAStatus() {
+        guard let otaCharacteristic else {
+            print("OTA characteristic not found. Cannot request OTA status.")
+            return
+        }
+        guard let data = "STATUS".data(using: .utf8) else { return }
+        peripheral?.writeValue(data, for: otaCharacteristic, type: .withResponse)
+        print("Requested OTA status.")
     }
     
     // MARK: - Load and Save Output Names

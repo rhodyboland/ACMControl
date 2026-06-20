@@ -147,9 +147,14 @@ Adafruit_MCP23X17 mcp;
 // ----- BLE Definitions -----
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define OTA_SERVICE_UUID        "8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0001"
+#define OTA_CHARACTERISTIC_UUID "8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0002"
 #define ACM_SERIAL_NUMBER   "ACM-0001"
+#define ACM_FIRMWARE_VERSION "1.0.0-ota"
+#define ACM_OTA_CAPABLE     1
 
 BLECharacteristic *pCharacteristic;
+BLECharacteristic *pOTACharacteristic;
 String bleDeviceName;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
@@ -628,6 +633,36 @@ class CharacteristicCallbacks : public BLECharacteristicCallbacks {
                     handleErrorIndicator(1); 
                     break;
             }
+        }
+    }
+};
+
+void notifyOTAStatus(const String &status) {
+    if (pOTACharacteristic == nullptr) {
+        return;
+    }
+    pOTACharacteristic->setValue(status.c_str());
+    pOTACharacteristic->notify();
+    Serial.println("OTA status: " + status);
+}
+
+class OTACharacteristicCallbacks : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        std::string value = std::string(pCharacteristic->getValue().c_str());
+        if (value.length() == 0) {
+            return;
+        }
+
+        String command = String(value.c_str());
+        Serial.print("Received OTA command: ");
+        Serial.println(command);
+
+        if (command == "STATUS") {
+            notifyOTAStatus("OTA:READY,FW=" + String(ACM_FIRMWARE_VERSION) + ",HW=" + String(ACM_HW_REV) + ",MTU=185");
+        } else if (command == "ABORT") {
+            notifyOTAStatus("OTA:ABORTED");
+        } else {
+            notifyOTAStatus("OTA:ERROR,UNKNOWN_COMMAND");
         }
     }
 };
@@ -1113,6 +1148,7 @@ void setup() {
     BLEServer *pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MyCallbacks());
     BLEService *pService = pServer->createService(SERVICE_UUID);
+    BLEService *pOTAService = pServer->createService(OTA_SERVICE_UUID);
 
     pCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID,
@@ -1127,6 +1163,18 @@ void setup() {
     String initialValue = "SN:" + String(ACM_SERIAL_NUMBER);
     pCharacteristic->setValue(initialValue.c_str());
     pService->start();
+
+    pOTACharacteristic = pOTAService->createCharacteristic(
+                        OTA_CHARACTERISTIC_UUID,
+                        BLECharacteristic::PROPERTY_READ |
+                        BLECharacteristic::PROPERTY_WRITE |
+                        BLECharacteristic::PROPERTY_NOTIFY |
+                        BLECharacteristic::PROPERTY_WRITE_NR
+                      );
+    pOTACharacteristic->setCallbacks(new OTACharacteristicCallbacks());
+    pOTACharacteristic->addDescriptor(new BLE2902());
+    pOTACharacteristic->setValue(("OTA:READY,FW=" + String(ACM_FIRMWARE_VERSION)).c_str());
+    pOTAService->start();
 
     BLEDevice::setMTU(185);
     reconfigureSerial1Mode();
@@ -1369,7 +1417,8 @@ void sendSensorData() {
     }
 
     String serialSection = "SN:" + String(ACM_SERIAL_NUMBER) + ";";
-    String dataPacket = voltageCurrentSection + loadChannelsSection + mediumChannelsSection + inverterSection + extrasSection + serialSection;
+    String firmwareSection = "FW:" + String(ACM_FIRMWARE_VERSION) + "," + String(ACM_HW_REV) + "," + String(ACM_OTA_CAPABLE) + "," + String(ACM_SERIAL_NUMBER) + ";";
+    String dataPacket = voltageCurrentSection + loadChannelsSection + mediumChannelsSection + inverterSection + extrasSection + serialSection + firmwareSection;
     pCharacteristic->setValue(dataPacket.c_str());
     pCharacteristic->notify();
 

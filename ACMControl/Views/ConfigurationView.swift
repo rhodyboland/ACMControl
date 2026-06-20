@@ -165,6 +165,59 @@ struct ConfigurationView: View {
                         }
                     }
                     
+                    if let firmwareVersion = bluetoothManager.connectedFirmwareVersion {
+                        HStack {
+                            Text("Firmware")
+                            Spacer()
+                            Text(firmwareVersion)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if let hardwareRevision = bluetoothManager.connectedHardwareRevision {
+                        HStack {
+                            Text("Hardware")
+                            Spacer()
+                            Text("R\(hardwareRevision)")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if bluetoothManager.connectedFirmwareVersion != nil {
+                        HStack {
+                            Text("App Updates")
+                            Spacer()
+                            Text(bluetoothManager.connectedOTACapable ? "Supported" : "Not Supported")
+                                .foregroundColor(bluetoothManager.connectedOTACapable ? .green : .secondary)
+                        }
+                    }
+                    
+                    if bluetoothManager.connectedOTACapable {
+                        HStack {
+                            Text("OTA Service")
+                            Spacer()
+                            Text(bluetoothManager.otaServiceAvailable ? "Ready" : "Not Found")
+                                .foregroundColor(bluetoothManager.otaServiceAvailable ? .green : .secondary)
+                        }
+                        
+                        if let otaStatus = bluetoothManager.otaStatus {
+                            HStack {
+                                Text("OTA Status")
+                                Spacer()
+                                Text(otaStatus)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                        
+                        if bluetoothManager.otaServiceAvailable {
+                            Button("Refresh OTA Status") {
+                                bluetoothManager.requestOTAStatus()
+                            }
+                        }
+                    }
+                    
                     Button(bluetoothManager.isScanningForPairing ? "Stop Scanning" : "Scan for ACMs") {
                         if bluetoothManager.isScanningForPairing {
                             bluetoothManager.stopPairingScan()
