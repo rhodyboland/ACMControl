@@ -1,0 +1,9 @@
+# ACM common OTA partition table for ESP32-S3 modules with at least 8 MB flash.
+# Works on production ESP32-S3-WROOM-1-N8R2 modules and N16R8 development units.
+# 8 MB total: two 3 MB OTA app slots, 20 KB NVS, 8 KB OTA data, ~1.94 MB SPIFFS.
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x300000,
+app1,     app,  ota_1,   0x310000, 0x300000,
+spiffs,   data, spiffs,  0x610000, 0x1F0000,

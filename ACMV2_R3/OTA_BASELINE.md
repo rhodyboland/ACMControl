@@ -10,13 +10,25 @@ Required board/flash setup:
 
 Arduino IDE recommendation:
 
-- If the ACM hardware has 8 MB flash, use an 8 MB OTA partition scheme such as `8M with spiffs`.
-  - This gives roughly two 3.2 MB OTA app slots and about 1.5 MB SPIFFS.
-  - This is the preferred production choice if the module really has 8 MB flash.
-- If the ACM hardware has 4 MB flash, prefer `Minimal SPIFFS`.
-  - This gives roughly two 1.9 MB OTA app slots and a small SPIFFS partition.
-  - This is better than the default 4 MB scheme if the firmware is already near 1.2 MB.
+- Production module `ESP32-S3-WROOM-1-N8R2`: 8 MB flash, 2 MB PSRAM.
+- Development/personal module `N16R8`: 16 MB flash, 8 MB PSRAM.
+- Use the included `partitions.csv` as the common OTA baseline partition table for both.
+  - It targets the first 8 MB of flash, so it works on both N8 and N16 modules.
+  - It gives two 3 MB OTA app slots plus about 1.94 MB SPIFFS.
+  - The N16R8 unit will leave its extra 8 MB flash unused, which is preferable to maintaining separate production/dev partition layouts.
 - Avoid `No OTA` and `Huge APP` partition schemes for OTA-capable baseline firmware.
+
+Arduino IDE settings:
+
+- Board: the matching ESP32-S3 board profile for the ACM hardware.
+- Flash Size:
+  - Production `N8R2`: `8MB`
+  - Personal `N16R8`: `16MB`, or `8MB` if using the exact same upload settings as production.
+- PSRAM:
+  - Production `N8R2`: `OPI PSRAM` / `2MB`, depending on the board menu wording.
+  - Personal `N16R8`: `OPI PSRAM` / `8MB`, depending on the board menu wording.
+- Partition Scheme: `Custom` / `Custom partition table`.
+- Custom partition file: `ACMV2_R3/partitions.csv`.
 
 Important: the partition scheme itself cannot be changed by a future OTA update. Any devices already flashed with a non-OTA or too-small partition layout need this baseline flashed manually over USB first.
 
