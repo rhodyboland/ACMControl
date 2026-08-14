@@ -216,6 +216,32 @@ struct ConfigurationView: View {
                                 bluetoothManager.requestOTAStatus()
                             }
                         }
+                        
+                        HStack {
+                            Text("Bundled Firmware")
+                            Spacer()
+                            Text(bluetoothManager.bundledFirmwareAvailable ? bluetoothManager.bundledFirmwareDisplayName : "Not bundled")
+                                .font(.caption)
+                                .foregroundColor(bluetoothManager.bundledFirmwareAvailable ? .secondary : .orange)
+                        }
+                        
+                        if let updateMessage = bluetoothManager.otaUpdateMessage {
+                            Text(updateMessage)
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        if bluetoothManager.otaUpdateInProgress {
+                            ProgressView(value: bluetoothManager.otaUpdateProgress)
+                            Button("Abort Firmware Update", role: .destructive) {
+                                bluetoothManager.abortFirmwareUpdate()
+                            }
+                        } else {
+                            Button("Install Bundled Firmware") {
+                                bluetoothManager.startBundledFirmwareUpdate()
+                            }
+                            .disabled(!bluetoothManager.otaServiceAvailable || !bluetoothManager.bundledFirmwareAvailable)
+                        }
                     }
                     
                     Button(bluetoothManager.isScanningForPairing ? "Stop Scanning" : "Scan for ACMs") {

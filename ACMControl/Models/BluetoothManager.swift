@@ -174,6 +174,47 @@ struct ACMFirmwareMetadata: Equatable {
     }
 }
 
+struct ACMOTAProtocol {
+    static let bundledFirmwareResourceName = "ACMV2_R3"
+    static let bundledFirmwareResourceExtension = "bin"
+    static let bundledFirmwareVersion = "1.0.1"
+    static let chunkSize = 72
+    
+    static func hexEncodedString(for data: Data) -> String {
+        data.map { String(format: "%02x", $0) }.joined()
+    }
+    
+    static func ackOffset(from status: String) -> Int? {
+        guard status.hasPrefix("OTA:ACK") else { return nil }
+        return keyedValue("OFFSET", in: status).flatMap(Int.init)
+    }
+    
+    static func isBeginOK(_ status: String) -> Bool {
+        status.hasPrefix("OTA:BEGIN_OK")
+    }
+    
+    static func isComplete(_ status: String) -> Bool {
+        status.hasPrefix("OTA:COMPLETE")
+    }
+    
+    static func isError(_ status: String) -> Bool {
+        status.hasPrefix("OTA:ERROR")
+    }
+    
+    static func isAborted(_ status: String) -> Bool {
+        status.hasPrefix("OTA:ABORTED")
+    }
+    
+    private static func keyedValue(_ key: String, in status: String) -> String? {
+        for component in status.split(separator: ",").dropFirst() {
+            let pair = component.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pair.count == 2, String(pair[0]) == key else { continue }
+            return String(pair[1])
+        }
+        return nil
+    }
+}
+
 
 
 /// A class responsible for handling all Bluetooth interactions with the ESP32-based ACM module.
@@ -319,10 +360,15 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     @Published var connectedOTACapable: Bool = false
     @Published var otaServiceAvailable: Bool = false
     @Published var otaStatus: String? = nil
+    @Published var otaUpdateInProgress: Bool = false
+    @Published var otaUpdateProgress: Double = 0.0
+    @Published var otaUpdateMessage: String? = nil
     
     // Flag to control switch updates (once on connection)
     private var shouldUpdateSwitches: Bool = false
     private var batteryCurrentSamples: [(timestamp: Date, current: Float)] = []
+    private var otaFirmwareData: Data?
+    private var otaFirmwareOffset: Int = 0
     
     // MARK: - CarPlay Data Selection
     /// Which data items the user wants to see on CarPlay. Defaults to 4 items.
@@ -717,6 +763,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         connectedOTACapable = false
         otaServiceAvailable = false
         otaStatus = nil
+        resetOTATransferState(message: nil)
         saveUserConfiguration()
         if let currentPeripheral = peripheral {
             centralManager.cancelPeripheralConnection(currentPeripheral)
@@ -823,6 +870,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             self.connectedOTACapable = false
             self.otaServiceAvailable = false
             self.otaStatus = nil
+            self.resetOTATransferState(message: nil)
         }
         attemptReconnection()
     }
@@ -894,6 +942,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                     applyFirmwareMetadata(metadata)
                     otaServiceAvailable = true
                 }
+                handleOTAStatus(receivedString)
             } else {
                 parseReceivedData(receivedString)
             }
@@ -1354,9 +1403,140 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             print("OTA characteristic not found. Cannot request OTA status.")
             return
         }
-        guard let data = "STATUS".data(using: .utf8) else { return }
-        peripheral?.writeValue(data, for: otaCharacteristic, type: .withResponse)
+        writeOTACommand("STATUS")
         print("Requested OTA status.")
+    }
+    
+    var bundledFirmwareAvailable: Bool {
+        bundledFirmwareURL() != nil
+    }
+    
+    var bundledFirmwareDisplayName: String {
+        "\(ACMOTAProtocol.bundledFirmwareResourceName).\(ACMOTAProtocol.bundledFirmwareResourceExtension)"
+    }
+    
+    func startBundledFirmwareUpdate() {
+        guard connectedOTACapable, otaServiceAvailable else {
+            otaUpdateMessage = "OTA service is not ready."
+            return
+        }
+        guard !otaUpdateInProgress else {
+            otaUpdateMessage = "Firmware update already in progress."
+            return
+        }
+        guard let otaCharacteristic else {
+            otaUpdateMessage = "OTA characteristic not found."
+            return
+        }
+        guard let hardwareRevision = connectedHardwareRevision else {
+            otaUpdateMessage = "Hardware revision is unknown."
+            return
+        }
+        guard let firmwareURL = bundledFirmwareURL() else {
+            otaUpdateMessage = "Add \(bundledFirmwareDisplayName) to the app bundle before updating."
+            return
+        }
+        
+        do {
+            let firmwareData = try Data(contentsOf: firmwareURL)
+            guard !firmwareData.isEmpty else {
+                otaUpdateMessage = "Bundled firmware file is empty."
+                return
+            }
+            
+            self.otaCharacteristic = otaCharacteristic
+            otaFirmwareData = firmwareData
+            otaFirmwareOffset = 0
+            otaUpdateInProgress = true
+            otaUpdateProgress = 0
+            otaUpdateMessage = "Starting firmware update..."
+            
+            let beginCommand = "BEGIN,\(firmwareData.count),\(ACMOTAProtocol.bundledFirmwareVersion),\(hardwareRevision),"
+            writeOTACommand(beginCommand)
+        } catch {
+            otaUpdateMessage = "Failed to load bundled firmware: \(error.localizedDescription)"
+        }
+    }
+    
+    func abortFirmwareUpdate() {
+        writeOTACommand("ABORT")
+        resetOTATransferState(message: "Firmware update aborted.")
+    }
+    
+    private func handleOTAStatus(_ status: String) {
+        if ACMOTAProtocol.isBeginOK(status) {
+            otaUpdateMessage = "Uploading firmware..."
+            sendNextOTAChunk()
+        } else if let ackOffset = ACMOTAProtocol.ackOffset(from: status) {
+            handleOTAAck(offset: ackOffset)
+        } else if ACMOTAProtocol.isComplete(status) {
+            otaUpdateProgress = 1
+            resetOTATransferState(message: "Firmware update complete. ACM is rebooting.")
+            requestOTAStatus()
+        } else if ACMOTAProtocol.isError(status) {
+            resetOTATransferState(message: status)
+        } else if ACMOTAProtocol.isAborted(status) {
+            resetOTATransferState(message: "Firmware update aborted.")
+        }
+    }
+    
+    private func handleOTAAck(offset: Int) {
+        guard otaUpdateInProgress, let firmwareData = otaFirmwareData else { return }
+        guard offset <= firmwareData.count else {
+            resetOTATransferState(message: "ACM acknowledged an invalid OTA offset.")
+            return
+        }
+        
+        otaFirmwareOffset = offset
+        otaUpdateProgress = firmwareData.isEmpty ? 0 : Double(offset) / Double(firmwareData.count)
+        
+        if offset >= firmwareData.count {
+            otaUpdateMessage = "Finalizing firmware..."
+            writeOTACommand("END")
+        } else {
+            sendNextOTAChunk()
+        }
+    }
+    
+    private func sendNextOTAChunk() {
+        guard otaUpdateInProgress, let firmwareData = otaFirmwareData else { return }
+        guard otaFirmwareOffset < firmwareData.count else {
+            writeOTACommand("END")
+            return
+        }
+        
+        let chunkEnd = min(otaFirmwareOffset + ACMOTAProtocol.chunkSize, firmwareData.count)
+        let chunk = firmwareData.subdata(in: otaFirmwareOffset..<chunkEnd)
+        let payload = ACMOTAProtocol.hexEncodedString(for: chunk)
+        writeOTACommand("DATA,\(otaFirmwareOffset),\(payload)")
+    }
+    
+    private func writeOTACommand(_ command: String) {
+        guard let otaCharacteristic else {
+            print("OTA characteristic not found. Cannot send command: \(command)")
+            return
+        }
+        guard let data = command.data(using: .utf8) else {
+            print("Failed to encode OTA command: \(command)")
+            return
+        }
+        peripheral?.writeValue(data, for: otaCharacteristic, type: .withResponse)
+    }
+    
+    private func resetOTATransferState(message: String?) {
+        otaUpdateInProgress = false
+        otaFirmwareData = nil
+        otaFirmwareOffset = 0
+        if message != nil {
+            otaUpdateMessage = message
+        }
+    }
+    
+    private func bundledFirmwareURL() -> URL? {
+        Bundle.main.url(
+            forResource: ACMOTAProtocol.bundledFirmwareResourceName,
+            withExtension: ACMOTAProtocol.bundledFirmwareResourceExtension
+        )
     }
     
     // MARK: - Load and Save Output Names
