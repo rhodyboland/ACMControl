@@ -9,28 +9,41 @@ import XCTest
 @testable import ACMControl
 
 final class ACMControlTests: XCTestCase {
-
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    
+    func testFirmwareMetadataParsesOTACapableTelemetrySection() {
+        let metadata = ACMFirmwareMetadata.parseFWSection("1.0.0-ota,2,1,ACM-0001")
+        
+        XCTAssertEqual(metadata?.firmwareVersion, "1.0.0-ota")
+        XCTAssertEqual(metadata?.hardwareRevision, "2")
+        XCTAssertEqual(metadata?.serialNumber, "ACM-0001")
+        XCTAssertEqual(metadata?.isOTACapable, true)
     }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+    
+    func testFirmwareMetadataTrimsWhitespaceAndAcceptsTextualOTAFlag() {
+        let metadata = ACMFirmwareMetadata.parseFWSection(" 1.0.1 , 3 , true , ACM-0002 \n")
+        
+        XCTAssertEqual(metadata?.firmwareVersion, "1.0.1")
+        XCTAssertEqual(metadata?.hardwareRevision, "3")
+        XCTAssertEqual(metadata?.serialNumber, "ACM-0002")
+        XCTAssertEqual(metadata?.isOTACapable, true)
     }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+    
+    func testFirmwareMetadataFallsBackToOTASuffix() {
+        let metadata = ACMFirmwareMetadata.parseFWSection("1.0.0-ota,2,0,ACM-0001")
+        
+        XCTAssertEqual(metadata?.isOTACapable, true)
     }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
+    
+    func testFirmwareMetadataRejectsIncompleteSection() {
+        XCTAssertNil(ACMFirmwareMetadata.parseFWSection("1.0.0-ota,2"))
     }
-
+    
+    func testOTAReadyStatusCanPopulateFirmwareMetadata() {
+        let metadata = ACMFirmwareMetadata.parseOTAReadyStatus("OTA:READY,FW=1.0.0-ota,HW=2,MTU=185,MAX_CHUNK=72")
+        
+        XCTAssertEqual(metadata?.firmwareVersion, "1.0.0-ota")
+        XCTAssertEqual(metadata?.hardwareRevision, "2")
+        XCTAssertEqual(metadata?.isOTACapable, true)
+        XCTAssertNil(metadata?.serialNumber)
+    }
 }

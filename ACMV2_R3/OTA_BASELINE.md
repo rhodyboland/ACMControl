@@ -38,5 +38,24 @@ BLE OTA scaffold:
 
 - Service UUID: `8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0001`
 - Characteristic UUID: `8b6f3f10-7d3b-4f8d-9f1b-2f3f4c7a0002`
-- Current test command: write `STATUS`
-- Expected notification: `OTA:READY,FW=<version>,HW=<revision>,MTU=185`
+- Commands are UTF-8 text for this first implementation.
+- Firmware chunks are hex-encoded, not raw binary, to avoid BLE/null-byte framing issues while the protocol is still young.
+
+Commands:
+
+- `STATUS`
+- `BEGIN,<size>,<version>,<hwRevision>,<md5>`
+- `DATA,<offset>,<hexPayload>`
+- `END`
+- `ABORT`
+
+Notifications:
+
+- `OTA:READY,FW=<version>,HW=<revision>,MTU=185,MAX_CHUNK=72`
+- `OTA:BEGIN_OK,SIZE=<bytes>,MAX_CHUNK=72`
+- `OTA:ACK,OFFSET=<nextOffset>`
+- `OTA:BUSY,WRITTEN=<bytes>,SIZE=<bytes>`
+- `OTA:COMPLETE,REBOOTING`
+- `OTA:ERROR,<reason>`
+
+The MD5 field in `BEGIN` is optional, but if provided it must be 32 lowercase or uppercase hex characters and will be checked by Arduino `Update`.

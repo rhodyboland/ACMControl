@@ -6,6 +6,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <Preferences.h>
+#include <Update.h>
 
 #include "driver/twai.h"          // ESP-IDF TWAI driver (built-in)
 
@@ -158,6 +159,14 @@ BLECharacteristic *pOTACharacteristic;
 String bleDeviceName;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
+
+bool otaInProgress = false;
+size_t otaExpectedSize = 0;
+size_t otaBytesWritten = 0;
+String otaTargetVersion = "";
+String otaExpectedMD5 = "";
+constexpr size_t OTA_MAX_CHUNK_BYTES = 72;
+uint8_t otaChunkBuffer[OTA_MAX_CHUNK_BYTES];
 
 // Configuration and Status Variables
 float critVoltage = 10.0;
@@ -646,6 +655,167 @@ void notifyOTAStatus(const String &status) {
     Serial.println("OTA status: " + status);
 }
 
+String otaToken(const String &command, int index) {
+    int start = 0;
+    for (int i = 0; i < index; i++) {
+        start = command.indexOf(',', start);
+        if (start < 0) {
+            return "";
+        }
+        start++;
+    }
+
+    int end = command.indexOf(',', start);
+    if (end < 0) {
+        end = command.length();
+    }
+    return command.substring(start, end);
+}
+
+int hexNibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+bool decodeHexChunk(const String &hex, uint8_t *buffer, size_t maxBytes, size_t &decodedBytes) {
+    decodedBytes = 0;
+    if ((hex.length() % 2) != 0) {
+        return false;
+    }
+
+    size_t byteCount = hex.length() / 2;
+    if (byteCount > maxBytes) {
+        return false;
+    }
+
+    for (size_t i = 0; i < byteCount; i++) {
+        int high = hexNibble(hex.charAt(i * 2));
+        int low = hexNibble(hex.charAt(i * 2 + 1));
+        if (high < 0 || low < 0) {
+            return false;
+        }
+        buffer[i] = (uint8_t)((high << 4) | low);
+    }
+
+    decodedBytes = byteCount;
+    return true;
+}
+
+void resetOTAState() {
+    otaInProgress = false;
+    otaExpectedSize = 0;
+    otaBytesWritten = 0;
+    otaTargetVersion = "";
+    otaExpectedMD5 = "";
+}
+
+void handleOTABegin(const String &command) {
+    if (otaInProgress) {
+        notifyOTAStatus("OTA:ERROR,ALREADY_IN_PROGRESS");
+        return;
+    }
+
+    size_t size = (size_t)strtoul(otaToken(command, 1).c_str(), nullptr, 10);
+    String version = otaToken(command, 2);
+    int hwRevision = atoi(otaToken(command, 3).c_str());
+    String md5 = otaToken(command, 4);
+
+    if (size == 0) {
+        notifyOTAStatus("OTA:ERROR,INVALID_SIZE");
+        return;
+    }
+    if (hwRevision != ACM_HW_REV) {
+        notifyOTAStatus("OTA:ERROR,HW_MISMATCH");
+        return;
+    }
+
+    if (!Update.begin(size, U_FLASH)) {
+        notifyOTAStatus(String("OTA:ERROR,BEGIN_FAILED,") + Update.errorString());
+        resetOTAState();
+        return;
+    }
+
+    md5.trim();
+    if (md5.length() == 32) {
+        Update.setMD5(md5.c_str());
+        otaExpectedMD5 = md5;
+    }
+
+    otaInProgress = true;
+    otaExpectedSize = size;
+    otaBytesWritten = 0;
+    otaTargetVersion = version;
+    notifyOTAStatus(String("OTA:BEGIN_OK,SIZE=") + String(otaExpectedSize) + ",MAX_CHUNK=" + String(OTA_MAX_CHUNK_BYTES));
+}
+
+void handleOTAData(const String &command) {
+    if (!otaInProgress) {
+        notifyOTAStatus("OTA:ERROR,NOT_STARTED");
+        return;
+    }
+
+    size_t offset = (size_t)strtoul(otaToken(command, 1).c_str(), nullptr, 10);
+    String hexPayload = otaToken(command, 2);
+    if (offset != otaBytesWritten) {
+        notifyOTAStatus(String("OTA:ERROR,OFFSET,EXPECTED=") + String(otaBytesWritten));
+        return;
+    }
+
+    size_t decodedBytes = 0;
+    if (!decodeHexChunk(hexPayload, otaChunkBuffer, OTA_MAX_CHUNK_BYTES, decodedBytes)) {
+        notifyOTAStatus("OTA:ERROR,BAD_CHUNK");
+        return;
+    }
+
+    if (otaBytesWritten + decodedBytes > otaExpectedSize) {
+        notifyOTAStatus("OTA:ERROR,TOO_MUCH_DATA");
+        return;
+    }
+
+    size_t written = Update.write(otaChunkBuffer, decodedBytes);
+    if (written != decodedBytes) {
+        notifyOTAStatus(String("OTA:ERROR,WRITE_FAILED,") + Update.errorString());
+        Update.abort();
+        resetOTAState();
+        return;
+    }
+
+    otaBytesWritten += written;
+    notifyOTAStatus(String("OTA:ACK,OFFSET=") + String(otaBytesWritten));
+}
+
+void handleOTAEnd() {
+    if (!otaInProgress) {
+        notifyOTAStatus("OTA:ERROR,NOT_STARTED");
+        return;
+    }
+    if (otaBytesWritten != otaExpectedSize) {
+        notifyOTAStatus(String("OTA:ERROR,SIZE_MISMATCH,WRITTEN=") + String(otaBytesWritten));
+        return;
+    }
+    if (!Update.end(true)) {
+        notifyOTAStatus(String("OTA:ERROR,END_FAILED,") + Update.errorString());
+        Update.abort();
+        resetOTAState();
+        return;
+    }
+
+    notifyOTAStatus("OTA:COMPLETE,REBOOTING");
+    resetOTAState();
+    delay(500);
+    ESP.restart();
+}
+
+void handleOTAAbort() {
+    if (otaInProgress) {
+        Update.abort();
+    }
+    resetOTAState();
+    notifyOTAStatus("OTA:ABORTED");
+}
+
 class OTACharacteristicCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
         std::string value = std::string(pCharacteristic->getValue().c_str());
@@ -658,9 +828,19 @@ class OTACharacteristicCallbacks : public BLECharacteristicCallbacks {
         Serial.println(command);
 
         if (command == "STATUS") {
-            notifyOTAStatus("OTA:READY,FW=" + String(ACM_FIRMWARE_VERSION) + ",HW=" + String(ACM_HW_REV) + ",MTU=185");
+            if (otaInProgress) {
+                notifyOTAStatus(String("OTA:BUSY,WRITTEN=") + String(otaBytesWritten) + ",SIZE=" + String(otaExpectedSize));
+            } else {
+                notifyOTAStatus(String("OTA:READY,FW=") + ACM_FIRMWARE_VERSION + ",HW=" + String(ACM_HW_REV) + ",MTU=185,MAX_CHUNK=" + String(OTA_MAX_CHUNK_BYTES));
+            }
+        } else if (command.startsWith("BEGIN,")) {
+            handleOTABegin(command);
+        } else if (command.startsWith("DATA,")) {
+            handleOTAData(command);
+        } else if (command == "END") {
+            handleOTAEnd();
         } else if (command == "ABORT") {
-            notifyOTAStatus("OTA:ABORTED");
+            handleOTAAbort();
         } else {
             notifyOTAStatus("OTA:ERROR,UNKNOWN_COMMAND");
         }
@@ -1173,7 +1353,7 @@ void setup() {
                       );
     pOTACharacteristic->setCallbacks(new OTACharacteristicCallbacks());
     pOTACharacteristic->addDescriptor(new BLE2902());
-    pOTACharacteristic->setValue(("OTA:READY,FW=" + String(ACM_FIRMWARE_VERSION)).c_str());
+    pOTACharacteristic->setValue((String("OTA:READY,FW=") + ACM_FIRMWARE_VERSION).c_str());
     pOTAService->start();
 
     BLEDevice::setMTU(185);
@@ -1339,6 +1519,10 @@ String floatToHex(float value, int scale);
 String stateToHex(bool state);
 
 void sendSensorData() {
+    if (otaInProgress) {
+        return;
+    }
+
     // If bmsConnected => use BMS current for BLE or keep your existing logic?
     // We'll just share BMS current in a new field. Or you can do whatever you want.
 

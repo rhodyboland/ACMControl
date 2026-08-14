@@ -165,29 +165,29 @@ struct ConfigurationView: View {
                         }
                     }
                     
-                    if let firmwareVersion = bluetoothManager.connectedFirmwareVersion {
+                    if bluetoothManager.isConnected || bluetoothManager.connectedFirmwareVersion != nil {
                         HStack {
                             Text("Firmware")
                             Spacer()
-                            Text(firmwareVersion)
+                            Text(bluetoothManager.connectedFirmwareVersion ?? "Waiting for metadata")
                                 .foregroundColor(.secondary)
                         }
                     }
                     
-                    if let hardwareRevision = bluetoothManager.connectedHardwareRevision {
+                    if bluetoothManager.isConnected || bluetoothManager.connectedHardwareRevision != nil {
                         HStack {
                             Text("Hardware")
                             Spacer()
-                            Text("R\(hardwareRevision)")
+                            Text(bluetoothManager.connectedHardwareRevision.map { "R\($0)" } ?? "Unknown")
                                 .foregroundColor(.secondary)
                         }
                     }
                     
-                    if bluetoothManager.connectedFirmwareVersion != nil {
+                    if bluetoothManager.isConnected || bluetoothManager.connectedFirmwareVersion != nil {
                         HStack {
                             Text("App Updates")
                             Spacer()
-                            Text(bluetoothManager.connectedOTACapable ? "Supported" : "Not Supported")
+                            Text(bluetoothManager.connectedFirmwareVersion == nil ? "Waiting for metadata" : (bluetoothManager.connectedOTACapable ? "Supported" : "Not Supported"))
                                 .foregroundColor(bluetoothManager.connectedOTACapable ? .green : .secondary)
                         }
                     }

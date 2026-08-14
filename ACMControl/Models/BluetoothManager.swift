@@ -130,6 +130,50 @@ enum InverterControlMode: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+struct ACMFirmwareMetadata: Equatable {
+    let firmwareVersion: String
+    let hardwareRevision: String
+    let isOTACapable: Bool
+    let serialNumber: String?
+    
+    static func parseFWSection<S: StringProtocol>(_ content: S) -> ACMFirmwareMetadata? {
+        let values = content.split(separator: ",", omittingEmptySubsequences: false)
+        guard values.count >= 3 else { return nil }
+        
+        let firmwareVersion = String(values[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let hardwareRevision = String(values[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let otaFlag = String(values[2]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let serialNumber = values.count >= 4
+            ? String(values[3]).trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
+        
+        return ACMFirmwareMetadata(
+            firmwareVersion: firmwareVersion,
+            hardwareRevision: hardwareRevision,
+            isOTACapable: ["1", "true", "yes"].contains(otaFlag) || firmwareVersion.lowercased().contains("ota"),
+            serialNumber: serialNumber?.isEmpty == true ? nil : serialNumber
+        )
+    }
+    
+    static func parseOTAReadyStatus(_ status: String) -> ACMFirmwareMetadata? {
+        guard status.hasPrefix("OTA:READY") else { return nil }
+        var fields: [String: String] = [:]
+        for component in status.split(separator: ",").dropFirst() {
+            let pair = component.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pair.count == 2 else { continue }
+            fields[String(pair[0])] = String(pair[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        guard let firmwareVersion = fields["FW"], let hardwareRevision = fields["HW"] else { return nil }
+        return ACMFirmwareMetadata(
+            firmwareVersion: firmwareVersion,
+            hardwareRevision: hardwareRevision,
+            isOTACapable: true,
+            serialNumber: nil
+        )
+    }
+}
+
 
 
 /// A class responsible for handling all Bluetooth interactions with the ESP32-based ACM module.
@@ -583,6 +627,15 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         return "\(hours)h \(remainingMinutes)m"
     }
     
+    private func applyFirmwareMetadata(_ metadata: ACMFirmwareMetadata) {
+        connectedFirmwareVersion = metadata.firmwareVersion
+        connectedHardwareRevision = metadata.hardwareRevision
+        connectedOTACapable = metadata.isOTACapable
+        if let serialNumber = metadata.serialNumber {
+            connectedSerialNumber = serialNumber
+        }
+    }
+    
     var pairedDeviceLabel: String {
         pairedSerialNumber ?? "No ACM Paired"
     }
@@ -837,6 +890,10 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
 //            print("Received data: \(receivedString)")
             if characteristic.uuid == Self.otaCharacteristicUUID {
                 otaStatus = receivedString
+                if let metadata = ACMFirmwareMetadata.parseOTAReadyStatus(receivedString) {
+                    applyFirmwareMetadata(metadata)
+                    otaServiceAvailable = true
+                }
             } else {
                 parseReceivedData(receivedString)
             }
@@ -1019,14 +1076,8 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 case "SN":
                     self.connectedSerialNumber = String(content)
                 case "FW":
-                    let values = content.split(separator: ",", omittingEmptySubsequences: false)
-                    if values.count >= 3 {
-                        self.connectedFirmwareVersion = String(values[0])
-                        self.connectedHardwareRevision = String(values[1])
-                        self.connectedOTACapable = values[2] == "1"
-                        if values.count >= 4 {
-                            self.connectedSerialNumber = String(values[3])
-                        }
+                    if let metadata = ACMFirmwareMetadata.parseFWSection(content) {
+                        self.applyFirmwareMetadata(metadata)
                     } else {
                         print("Invalid firmware metadata: \(content)")
                     }
